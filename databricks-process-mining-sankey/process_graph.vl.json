@@ -1,0 +1,491 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "Prozessgraph (Directly-Follows-Graph). Layout kommt aus 06_process_graph_dataset.sql.",
+  "width": "container",
+  "height": "container",
+  "data": {
+    "name": "databricks_query"
+  },
+  "config": {
+    "view": {
+      "stroke": null
+    }
+  },
+  "layer": [
+    {
+      "transform": [
+        {
+          "filter": "datum.row_type === 'edge'"
+        }
+      ],
+      "mark": {
+        "type": "line",
+        "color": "#8f8e88",
+        "strokeJoin": "round",
+        "strokeCap": "butt"
+      },
+      "encoding": {
+        "x": {
+          "field": "x",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              800
+            ],
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "y": {
+          "field": "y",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              840
+            ],
+            "reverse": true,
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "detail": {
+          "field": "id",
+          "type": "nominal"
+        },
+        "order": {
+          "field": "seq",
+          "type": "quantitative"
+        },
+        "strokeWidth": {
+          "field": "cases",
+          "type": "quantitative",
+          "scale": {
+            "type": "sqrt",
+            "range": [
+              1,
+              7
+            ]
+          },
+          "legend": null
+        }
+      }
+    },
+    {
+      "transform": [
+        {
+          "filter": "datum.row_type === 'arrow'"
+        }
+      ],
+      "mark": {
+        "type": "point",
+        "filled": true,
+        "color": "#8f8e88",
+        "opacity": 1
+      },
+      "encoding": {
+        "x": {
+          "field": "x",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              800
+            ],
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "y": {
+          "field": "y",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              840
+            ],
+            "reverse": true,
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "shape": {
+          "field": "shape",
+          "type": "nominal",
+          "scale": null
+        },
+        "size": {
+          "field": "cases",
+          "type": "quantitative",
+          "scale": {
+            "type": "sqrt",
+            "range": [
+              45,
+              190
+            ]
+          },
+          "legend": null
+        }
+      }
+    },
+    {
+      "transform": [
+        {
+          "filter": "datum.row_type === 'label'"
+        },
+        {
+          "calculate": "replace(format(datum.cases, ','), ',', '.')",
+          "as": "cases_txt"
+        },
+        {
+          "calculate": "max(0, (8 + 6 * length(datum.cases_txt)) / 14 - 1)",
+          "as": "b"
+        },
+        {
+          "calculate": "'M' + (-datum.b) + ',-1H' + datum.b + 'A1,1,0,0,1,' + datum.b + ',1H' + (-datum.b) + 'A1,1,0,0,1,' + (-datum.b) + ',-1Z'",
+          "as": "pill"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "point",
+            "filled": true,
+            "fill": "#ffffff",
+            "stroke": "#c3c2b7",
+            "strokeWidth": 1,
+            "opacity": 1,
+            "size": 196
+          },
+          "encoding": {
+            "shape": {
+              "field": "pill",
+              "type": "nominal",
+              "scale": null
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "fontSize": 10,
+            "color": "#52514e"
+          },
+          "encoding": {
+            "text": {
+              "field": "cases_txt",
+              "type": "nominal"
+            }
+          }
+        }
+      ],
+      "encoding": {
+        "x": {
+          "field": "x",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              800
+            ],
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "y": {
+          "field": "y",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              840
+            ],
+            "reverse": true,
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "tooltip": [
+          {
+            "field": "src",
+            "type": "nominal",
+            "title": "Von"
+          },
+          {
+            "field": "tgt",
+            "type": "nominal",
+            "title": "Nach"
+          },
+          {
+            "field": "cases",
+            "type": "quantitative",
+            "title": "Übergänge",
+            "format": ","
+          },
+          {
+            "field": "median_wait_h",
+            "type": "quantitative",
+            "title": "Median-Wartezeit (h)",
+            "format": ".0f"
+          }
+        ]
+      }
+    },
+    {
+      "transform": [
+        {
+          "filter": "datum.row_type === 'node' && datum.node_kind === 'activity'"
+        },
+        {
+          "calculate": "datum.x - datum.w / 2",
+          "as": "x_lo"
+        },
+        {
+          "calculate": "datum.x + datum.w / 2",
+          "as": "x_hi"
+        },
+        {
+          "calculate": "datum.y - datum.h / 2",
+          "as": "y_lo"
+        },
+        {
+          "calculate": "datum.y + datum.h / 2",
+          "as": "y_hi"
+        },
+        {
+          "calculate": "datum.x - datum.w / 2 + 8",
+          "as": "x_txt"
+        },
+        {
+          "calculate": "replace(format(datum.cases, ','), ',', '.')",
+          "as": "cases_txt"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "rect",
+            "cornerRadius": 3,
+            "stroke": "#6da7ec",
+            "strokeWidth": 1
+          },
+          "encoding": {
+            "x": {
+              "field": "x_lo",
+              "type": "quantitative",
+              "scale": {
+                "domain": [
+                  0,
+                  800
+                ],
+                "nice": false,
+                "zero": false
+              },
+              "axis": null
+            },
+            "x2": {
+              "field": "x_hi"
+            },
+            "y": {
+              "field": "y_lo",
+              "type": "quantitative",
+              "scale": {
+                "domain": [
+                  0,
+                  840
+                ],
+                "reverse": true,
+                "nice": false,
+                "zero": false
+              },
+              "axis": null
+            },
+            "y2": {
+              "field": "y_hi"
+            },
+            "fill": {
+              "field": "cases",
+              "type": "quantitative",
+              "scale": {
+                "range": [
+                  "#f4f8fd",
+                  "#86b6ef"
+                ]
+              },
+              "legend": null
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "align": "left",
+            "baseline": "middle",
+            "dy": -7,
+            "fontSize": 11,
+            "fontWeight": 600,
+            "color": "#0b0b0b"
+          },
+          "encoding": {
+            "text": {
+              "field": "id",
+              "type": "nominal"
+            }
+          }
+        },
+        {
+          "mark": {
+            "type": "text",
+            "align": "left",
+            "baseline": "middle",
+            "dy": 8,
+            "fontSize": 10,
+            "color": "#52514e"
+          },
+          "encoding": {
+            "text": {
+              "field": "cases_txt",
+              "type": "nominal"
+            }
+          }
+        }
+      ],
+      "encoding": {
+        "x": {
+          "field": "x_txt",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              800
+            ],
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "y": {
+          "field": "y",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              840
+            ],
+            "reverse": true,
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "tooltip": [
+          {
+            "field": "id",
+            "type": "nominal",
+            "title": "Aktivität"
+          },
+          {
+            "field": "cases",
+            "type": "quantitative",
+            "title": "Vorkommen",
+            "format": ","
+          }
+        ]
+      }
+    },
+    {
+      "transform": [
+        {
+          "filter": "datum.row_type === 'node' && datum.node_kind !== 'activity'"
+        },
+        {
+          "calculate": "datum.node_kind === 'start' ? 'triangle-right' : 'square'",
+          "as": "symbol"
+        },
+        {
+          "calculate": "datum.node_kind === 'start' ? 'Start' : 'Ende'",
+          "as": "node_label"
+        }
+      ],
+      "layer": [
+        {
+          "mark": {
+            "type": "point",
+            "shape": "circle",
+            "filled": true,
+            "fill": "#ffffff",
+            "stroke": "#8f8e88",
+            "strokeWidth": 2,
+            "opacity": 1,
+            "size": 420
+          }
+        },
+        {
+          "mark": {
+            "type": "point",
+            "filled": true,
+            "color": "#52514e",
+            "opacity": 1,
+            "size": 60
+          },
+          "encoding": {
+            "shape": {
+              "field": "symbol",
+              "type": "nominal",
+              "scale": null
+            }
+          }
+        }
+      ],
+      "encoding": {
+        "x": {
+          "field": "x",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              800
+            ],
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "y": {
+          "field": "y",
+          "type": "quantitative",
+          "scale": {
+            "domain": [
+              0,
+              840
+            ],
+            "reverse": true,
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "tooltip": [
+          {
+            "field": "node_label",
+            "type": "nominal",
+            "title": "Knoten"
+          },
+          {
+            "field": "cases",
+            "type": "quantitative",
+            "title": "Fälle",
+            "format": ","
+          }
+        ]
+      }
+    }
+  ]
+}

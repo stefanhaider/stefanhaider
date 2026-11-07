@@ -70,40 +70,6 @@
         "  timestampdiff(MINUTE, event_ts, next_ts) / 60.0 AS wait_h   -- NULL beim Ende\n",
         "FROM t\n"
       ]
-    },
-    {
-      "name": "sankey_top5",
-      "displayName": "Sankey – Top-5-Varianten",
-      "queryLines": [
-        "WITH traces AS (\n",
-        "  SELECT\n",
-        "    case_id,\n",
-        "    region,\n",
-        "    transform(array_sort(collect_list(struct(event_ts, step_no, activity))), x -> x.activity) AS trace\n",
-        "  FROM main.process_mining.event_log\n",
-        "  GROUP BY case_id, region\n",
-        "),\n",
-        "ranked AS (\n",
-        "  SELECT *, DENSE_RANK() OVER (ORDER BY variant_cases DESC, variant) AS variant_rank\n",
-        "  FROM (SELECT *, COUNT(*) OVER (PARTITION BY trace) AS variant_cases,\n",
-        "               array_join(trace, ' → ') AS variant\n",
-        "        FROM traces)\n",
-        ")\n",
-        "SELECT\n",
-        "  region,\n",
-        "  variant_rank,\n",
-        "  IF(variant_rank <= 5, variant, 'Sonstige Varianten') AS variant,\n",
-        "  try_element_at(trace, 1)                                         AS step_1,\n",
-        "  IF(variant_rank <= 5, try_element_at(trace, 2), 'Sonstige Varianten') AS step_2,\n",
-        "  IF(variant_rank <= 5, try_element_at(trace, 3), NULL)            AS step_3,\n",
-        "  IF(variant_rank <= 5, try_element_at(trace, 4), NULL)            AS step_4,\n",
-        "  IF(variant_rank <= 5, try_element_at(trace, 5), NULL)            AS step_5,\n",
-        "  IF(variant_rank <= 5, try_element_at(trace, 6), NULL)            AS step_6,\n",
-        "  IF(variant_rank <= 5, try_element_at(trace, 7), NULL)            AS step_7,\n",
-        "  COUNT(*)                                                         AS cases\n",
-        "FROM ranked\n",
-        "GROUP BY ALL\n"
-      ]
     }
   ],
   "pages": [
@@ -153,19 +119,6 @@
                   ],
                   "disaggregated": false
                 }
-              },
-              {
-                "name": "f_sankey_top5",
-                "query": {
-                  "datasetName": "sankey_top5",
-                  "fields": [
-                    {
-                      "name": "region",
-                      "expression": "`region`"
-                    }
-                  ],
-                  "disaggregated": false
-                }
               }
             ],
             "spec": {
@@ -187,11 +140,6 @@
                     "fieldName": "region",
                     "displayName": "Region",
                     "queryName": "f_transitions"
-                  },
-                  {
-                    "fieldName": "region",
-                    "displayName": "Region",
-                    "queryName": "f_sankey_top5"
                   }
                 ]
               },
@@ -580,104 +528,6 @@
         },
         {
           "widget": {
-            "name": "sankey_process_flow",
-            "queries": [
-              {
-                "name": "main_query",
-                "query": {
-                  "datasetName": "sankey_top5",
-                  "fields": [
-                    {
-                      "name": "step_1",
-                      "expression": "`step_1`"
-                    },
-                    {
-                      "name": "step_2",
-                      "expression": "`step_2`"
-                    },
-                    {
-                      "name": "step_3",
-                      "expression": "`step_3`"
-                    },
-                    {
-                      "name": "step_4",
-                      "expression": "`step_4`"
-                    },
-                    {
-                      "name": "step_5",
-                      "expression": "`step_5`"
-                    },
-                    {
-                      "name": "step_6",
-                      "expression": "`step_6`"
-                    },
-                    {
-                      "name": "step_7",
-                      "expression": "`step_7`"
-                    },
-                    {
-                      "name": "sum(cases)",
-                      "expression": "SUM(`cases`)"
-                    }
-                  ],
-                  "disaggregated": false
-                }
-              }
-            ],
-            "spec": {
-              "version": 1,
-              "widgetType": "sankey",
-              "encodings": {
-                "stages": [
-                  {
-                    "fieldName": "step_1",
-                    "displayName": "Schritt 1"
-                  },
-                  {
-                    "fieldName": "step_2",
-                    "displayName": "Schritt 2"
-                  },
-                  {
-                    "fieldName": "step_3",
-                    "displayName": "Schritt 3"
-                  },
-                  {
-                    "fieldName": "step_4",
-                    "displayName": "Schritt 4"
-                  },
-                  {
-                    "fieldName": "step_5",
-                    "displayName": "Schritt 5"
-                  },
-                  {
-                    "fieldName": "step_6",
-                    "displayName": "Schritt 6"
-                  },
-                  {
-                    "fieldName": "step_7",
-                    "displayName": "Schritt 7"
-                  }
-                ],
-                "value": {
-                  "fieldName": "sum(cases)",
-                  "displayName": "Fälle"
-                }
-              },
-              "frame": {
-                "showTitle": true,
-                "title": "Prozessfluss – Top-5-Varianten"
-              }
-            }
-          },
-          "position": {
-            "x": 0,
-            "y": 12,
-            "width": 6,
-            "height": 8
-          }
-        },
-        {
-          "widget": {
             "name": "bar_variant_pareto",
             "queries": [
               {
@@ -730,8 +580,8 @@
             }
           },
           "position": {
-            "x": 0,
-            "y": 20,
+            "x": 3,
+            "y": 12,
             "width": 3,
             "height": 7
           }
@@ -785,7 +635,7 @@
           },
           "position": {
             "x": 3,
-            "y": 20,
+            "y": 19,
             "width": 3,
             "height": 7
           }
@@ -851,9 +701,26 @@
           },
           "position": {
             "x": 0,
-            "y": 27,
+            "y": 26,
             "width": 6,
             "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "text_process_graph_hint",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### Prozessgraph\n",
+                "Hier die Custom Visualization einfügen: Dataset aus `06_process_graph_dataset.sql`, Typ *Custom Viz*, Spezifikation aus `process_graph.vl.json` (siehe README).\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 3,
+            "height": 14
           }
         }
       ]
