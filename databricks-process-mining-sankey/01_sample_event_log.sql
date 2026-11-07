@@ -24,7 +24,8 @@ cases AS (
     activities,
     concat('ORD-', lpad(CAST(variant_id * 10000 + case_no AS STRING), 6, '0')) AS case_id,
     element_at(array('DACH','Nordics','Benelux','Südeuropa'), CAST(pmod(case_no, 4) + 1 AS INT)) AS region,
-    timestampadd(HOUR, CAST(pmod(case_no * 37, 24 * 180) AS INT), TIMESTAMP'2026-01-01 08:00:00') AS case_start
+    -- Start gleichmäßig über 26 Wochen ab Mo 05.01.2026 verteilt
+    timestampadd(HOUR, CAST(pmod(abs(hash(variant_id, case_no)), 26 * 7 * 24) AS INT), TIMESTAMP'2026-01-05 00:00:00') AS case_start
   FROM variants
   LATERAL VIEW explode(sequence(1, n_cases)) AS case_no
 )
@@ -34,10 +35,19 @@ SELECT
   c.variant_id,
   a.pos            AS step_no,
   a.activity,
-  -- jede Aktivität 2–50 h nach der vorherigen (deterministisch pseudo-zufällig)
+  -- Wartezeit bis zur Aktivität = typische Dauer je Aktivität × Faktor 0,5–1,5
+  -- (deterministisch pseudo-zufällig, damit Engpässe sichtbar werden)
   timestampadd(
     HOUR,
-    CAST(aggregate(sequence(0, a.pos), 0, (acc, i) -> acc + IF(i = 0, 0, 2 + pmod(abs(hash(c.case_id, i)), 48))) AS INT),
+    CAST(aggregate(sequence(0, a.pos), 0D, (acc, i) -> acc + IF(i = 0, 0D,
+      element_at(map(
+        'Kreditprüfung', 6D, 'Auftrag freigegeben', 10D, 'Preisänderung', 36D,
+        'Lieferung', 52D, 'Rechnung gestellt', 8D, 'Zahlung erhalten', 260D,
+        'Mahnung', 340D, 'Gutschrift', 96D, 'Storniert', 30D
+      ), element_at(c.activities, i + 1))
+      * (0.5 + pmod(abs(hash(c.case_id, i)), 100) / 100.0)
+      -- simulierter Lieferengpass ab Mai: Lieferung dauert 80 % länger
+      * IF(element_at(c.activities, i + 1) = 'Lieferung' AND month(c.case_start) >= 5, 1.8D, 1D))) AS INT),
     c.case_start
   ) AS event_ts
 FROM cases c

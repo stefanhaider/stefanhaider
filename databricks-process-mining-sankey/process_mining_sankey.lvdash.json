@@ -36,6 +36,7 @@
         "WITH traces AS (\n",
         "  SELECT\n",
         "    case_id, region,\n",
+        "    min(event_ts) AS case_start,\n",
         "    array_join(transform(array_sort(collect_list(struct(event_ts, step_no, activity))), x -> x.activity), '|') AS variant,\n",
         "    timestampdiff(HOUR, min(event_ts), max(event_ts)) / 24.0 AS throughput_days,\n",
         "    max(CASE WHEN activity = 'Storniert' THEN 1 ELSE 0 END) AS is_cancelled,\n",
@@ -43,8 +44,65 @@
         "  FROM main.process_mining.event_log\n",
         "  GROUP BY case_id, region\n",
         ")\n",
-        "SELECT region, case_id, variant, throughput_days, is_cancelled, has_rework\n",
+        "SELECT region, case_id, case_start, variant, throughput_days, is_cancelled, has_rework\n",
         "FROM traces\n"
+      ]
+    },
+    {
+      "name": "transitions",
+      "displayName": "Übergänge (Directly-Follows)",
+      "queryLines": [
+        "WITH t AS (\n",
+        "  SELECT\n",
+        "    case_id,\n",
+        "    region,\n",
+        "    activity AS from_activity,\n",
+        "    event_ts,\n",
+        "    LEAD(activity) OVER (PARTITION BY case_id ORDER BY event_ts, step_no) AS to_activity,\n",
+        "    LEAD(event_ts) OVER (PARTITION BY case_id ORDER BY event_ts, step_no) AS next_ts\n",
+        "  FROM main.process_mining.event_log\n",
+        ")\n",
+        "SELECT\n",
+        "  case_id,\n",
+        "  region,\n",
+        "  from_activity,\n",
+        "  COALESCE(to_activity, '■ Ende')               AS to_activity,\n",
+        "  timestampdiff(MINUTE, event_ts, next_ts) / 60.0 AS wait_h   -- NULL beim Ende\n",
+        "FROM t\n"
+      ]
+    },
+    {
+      "name": "sankey_top5",
+      "displayName": "Sankey – Top-5-Varianten",
+      "queryLines": [
+        "WITH traces AS (\n",
+        "  SELECT\n",
+        "    case_id,\n",
+        "    region,\n",
+        "    transform(array_sort(collect_list(struct(event_ts, step_no, activity))), x -> x.activity) AS trace\n",
+        "  FROM main.process_mining.event_log\n",
+        "  GROUP BY case_id, region\n",
+        "),\n",
+        "ranked AS (\n",
+        "  SELECT *, DENSE_RANK() OVER (ORDER BY variant_cases DESC, variant) AS variant_rank\n",
+        "  FROM (SELECT *, COUNT(*) OVER (PARTITION BY trace) AS variant_cases,\n",
+        "               array_join(trace, ' → ') AS variant\n",
+        "        FROM traces)\n",
+        ")\n",
+        "SELECT\n",
+        "  region,\n",
+        "  variant_rank,\n",
+        "  IF(variant_rank <= 5, variant, 'Sonstige Varianten') AS variant,\n",
+        "  try_element_at(trace, 1)                                         AS step_1,\n",
+        "  IF(variant_rank <= 5, try_element_at(trace, 2), 'Sonstige Varianten') AS step_2,\n",
+        "  IF(variant_rank <= 5, try_element_at(trace, 3), NULL)            AS step_3,\n",
+        "  IF(variant_rank <= 5, try_element_at(trace, 4), NULL)            AS step_4,\n",
+        "  IF(variant_rank <= 5, try_element_at(trace, 5), NULL)            AS step_5,\n",
+        "  IF(variant_rank <= 5, try_element_at(trace, 6), NULL)            AS step_6,\n",
+        "  IF(variant_rank <= 5, try_element_at(trace, 7), NULL)            AS step_7,\n",
+        "  COUNT(*)                                                         AS cases\n",
+        "FROM ranked\n",
+        "GROUP BY ALL\n"
       ]
     }
   ],
@@ -58,7 +116,7 @@
             "name": "filter_region",
             "queries": [
               {
-                "name": "f_sankey",
+                "name": "f_sankey_paths",
                 "query": {
                   "datasetName": "sankey_paths",
                   "fields": [
@@ -71,9 +129,35 @@
                 }
               },
               {
-                "name": "f_kpis",
+                "name": "f_case_kpis",
                 "query": {
                   "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_transitions",
+                "query": {
+                  "datasetName": "transitions",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_sankey_top5",
+                "query": {
+                  "datasetName": "sankey_top5",
                   "fields": [
                     {
                       "name": "region",
@@ -92,12 +176,22 @@
                   {
                     "fieldName": "region",
                     "displayName": "Region",
-                    "queryName": "f_sankey"
+                    "queryName": "f_sankey_paths"
                   },
                   {
                     "fieldName": "region",
                     "displayName": "Region",
-                    "queryName": "f_kpis"
+                    "queryName": "f_case_kpis"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "f_transitions"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "f_sankey_top5"
                   }
                 ]
               },
@@ -356,12 +450,142 @@
         },
         {
           "widget": {
+            "name": "heatmap_transition_count",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "transitions",
+                  "fields": [
+                    {
+                      "name": "from_activity",
+                      "expression": "`from_activity`"
+                    },
+                    {
+                      "name": "to_activity",
+                      "expression": "`to_activity`"
+                    },
+                    {
+                      "name": "count(case_id)",
+                      "expression": "COUNT(`case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "heatmap",
+              "encodings": {
+                "x": {
+                  "fieldName": "to_activity",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "nach"
+                },
+                "y": {
+                  "fieldName": "from_activity",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "von"
+                },
+                "color": {
+                  "fieldName": "count(case_id)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Übergänge"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozess-Übergänge – Häufigkeit"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "heatmap_transition_wait",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "transitions",
+                  "fields": [
+                    {
+                      "name": "from_activity",
+                      "expression": "`from_activity`"
+                    },
+                    {
+                      "name": "to_activity",
+                      "expression": "`to_activity`"
+                    },
+                    {
+                      "name": "median(wait_h)",
+                      "expression": "MEDIAN(`wait_h`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "heatmap",
+              "encodings": {
+                "x": {
+                  "fieldName": "to_activity",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "nach"
+                },
+                "y": {
+                  "fieldName": "from_activity",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "von"
+                },
+                "color": {
+                  "fieldName": "median(wait_h)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Median-Wartezeit (h)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozess-Übergänge – Median-Wartezeit (h)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
             "name": "sankey_process_flow",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "sankey_paths",
+                  "datasetName": "sankey_top5",
                   "fields": [
                     {
                       "name": "step_1",
@@ -441,15 +665,129 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "Prozessfluss (Sankey) – Fälle je Prozessschritt"
+                "title": "Prozessfluss – Top-5-Varianten"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 5,
+            "y": 12,
             "width": 6,
-            "height": 10
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_variant_pareto",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sankey_paths",
+                  "fields": [
+                    {
+                      "name": "variant",
+                      "expression": "`variant`"
+                    },
+                    {
+                      "name": "sum(cases)",
+                      "expression": "SUM(`cases`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sum(cases)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Fälle"
+                },
+                "y": {
+                  "fieldName": "variant",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "Variante"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Varianten nach Häufigkeit (Pareto)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 20,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "line_throughput_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "weekly(case_start)",
+                      "expression": "DATE_TRUNC(\"WEEK\", `case_start`)"
+                    },
+                    {
+                      "name": "avg(throughput_days)",
+                      "expression": "AVG(`throughput_days`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "weekly(case_start)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Startwoche"
+                },
+                "y": {
+                  "fieldName": "avg(throughput_days)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Ø Durchlaufzeit (Tage)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ø Durchlaufzeit je Startwoche"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 20,
+            "width": 3,
+            "height": 7
           }
         },
         {
@@ -513,7 +851,7 @@
           },
           "position": {
             "x": 0,
-            "y": 15,
+            "y": 27,
             "width": 6,
             "height": 7
           }

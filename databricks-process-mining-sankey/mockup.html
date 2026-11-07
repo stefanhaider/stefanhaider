@@ -126,7 +126,7 @@
 
     <div class="card kpi"><div class="label">Fälle</div><div class="value">1.000</div><div class="delta">Aufträge im Zeitraum</div></div>
     <div class="card kpi"><div class="label">Prozessvarianten</div><div class="value">8</div><div class="delta">Top‑Variante: 42,0 %</div></div>
-    <div class="card kpi"><div class="label">Ø Durchlaufzeit</div><div class="value">4,8 Tage</div><div class="delta">Angelegt → letzte Aktivität</div></div>
+    <div class="card kpi"><div class="label">Ø Durchlaufzeit</div><div class="value">14,5 Tage</div><div class="delta">Angelegt → letzte Aktivität</div></div>
     <div class="card kpi"><div class="label">Happy‑Path‑Quote</div><div class="value">63,0 %</div><div class="delta">Varianten 1 + 2</div></div>
     <div class="card kpi"><div class="label">Stornoquote</div><div class="value">13,0 %</div><div class="delta">130 Fälle storniert</div></div>
     <div class="card kpi"><div class="label">Nacharbeitsquote</div><div class="value">24,0 %</div><div class="delta">Mahnung, Preisänderung, Gutschrift</div></div>
@@ -158,14 +158,14 @@
 <script>
 // Gleiche Daten wie Ergebnis von 02_sankey_dataset.sql (über alle Regionen aggregiert)
 const PATHS = [
-  { cases: 420, days: 5.2, steps: ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Lieferung","Rechnung gestellt","Zahlung erhalten"] },
-  { cases: 210, days: 4.2, steps: ["Auftrag angelegt","Auftrag freigegeben","Lieferung","Rechnung gestellt","Zahlung erhalten"] },
-  { cases: 130, days: 6.3, steps: ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Lieferung","Rechnung gestellt","Mahnung","Zahlung erhalten"] },
-  { cases:  70, days: 1.9, steps: ["Auftrag angelegt","Kreditprüfung","Storniert"] },
-  { cases:  60, days: 6.1, steps: ["Auftrag angelegt","Auftrag freigegeben","Preisänderung","Auftrag freigegeben","Lieferung","Rechnung gestellt","Zahlung erhalten"] },
-  { cases:  50, days: 4.1, steps: ["Auftrag angelegt","Auftrag freigegeben","Lieferung","Rechnung gestellt","Gutschrift"] },
-  { cases:  35, days: 4.2, steps: ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Lieferung","Storniert"] },
-  { cases:  25, days: 1.0, steps: ["Auftrag angelegt","Storniert"] },
+  { cases: 420, days: 14.7, steps: ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Lieferung","Rechnung gestellt","Zahlung erhalten"] },
+  { cases: 210, days: 14.0, steps: ["Auftrag angelegt","Auftrag freigegeben","Lieferung","Rechnung gestellt","Zahlung erhalten"] },
+  { cases: 130, days: 28.8, steps: ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Lieferung","Rechnung gestellt","Mahnung","Zahlung erhalten"] },
+  { cases:  70, days: 1.5, steps: ["Auftrag angelegt","Kreditprüfung","Storniert"] },
+  { cases:  60, days: 16.4, steps: ["Auftrag angelegt","Auftrag freigegeben","Preisänderung","Auftrag freigegeben","Lieferung","Rechnung gestellt","Zahlung erhalten"] },
+  { cases:  50, days: 7.5, steps: ["Auftrag angelegt","Auftrag freigegeben","Lieferung","Rechnung gestellt","Gutschrift"] },
+  { cases:  35, days: 5.2, steps: ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Lieferung","Storniert"] },
+  { cases:  25, days: 1.2, steps: ["Auftrag angelegt","Storniert"] },
 ];
 // Reihenfolge innerhalb einer Stufe (reduziert Kreuzungen) + Farbgruppe
 const ORDER = ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Preisänderung","Lieferung","Rechnung gestellt",

@@ -1,11 +1,27 @@
-# Process Mining als Sankey-Diagramm in Databricks AI/BI Dashboards (Mockup)
+# Process Mining in Databricks AI/BI Dashboards (Mockup)
 
-![Vorschau](preview.png)
+Zwei Mockups auf denselben synthetischen Order-to-Cash-Daten, beide **ohne Databricks App**
+umsetzbar, nur mit nativen AI/BI-Visualisierungen:
 
-Mockup eines Prozessfluss-Dashboards für **Process Mining** (Beispiel: Order-to-Cash).
-Das Sankey-Diagramm zeigt, wie 1.000 Aufträge Schritt für Schritt durch den Prozess
-laufen. Man sieht den Happy Path, Abkürzungen (ohne Kreditprüfung), Nacharbeit
-(Preisänderung, Mahnung, Gutschrift) und Abbrüche (Storno).
+1. **`dashboard.html`: empfohlene Variante.** Übergangs-Heatmaps (Häufigkeit und
+   Median-Wartezeit) als Ersatz für eine Process Map, Sankey nur für die Top-5-Varianten,
+   Varianten-Pareto und Trend der Durchlaufzeit.
+2. **`mockup.html`: reines Sankey** über alle Varianten.
+
+![Dashboard-Vorschau](dashboard_preview.png)
+
+### Warum Heatmaps statt nur Sankey?
+
+* Das Sankey rollt Schleifen in Spalten aus und wird bei vielen oder langen Varianten
+  unlesbar. Die Heatmap „von × nach“ enthält dieselben Informationen wie eine Process Map
+  (Directly-Follows-Graph): jede Aktivität einmal, Schleifen und Rücksprünge direkt sichtbar.
+* Die Wartezeit-Heatmap zeigt **Engpässe**. Das Sankey hat keine Zeitdimension.
+* Das Sankey bleibt für die Top-5-Varianten im Dashboard, weil es für Präsentationen gut
+  funktioniert. Seltene Varianten werden zu „Sonstige“ zusammengefasst.
+
+### Sankey über alle Varianten (`mockup.html`)
+
+![Sankey-Vorschau](preview.png)
 
 ## Dateien
 
@@ -13,9 +29,12 @@ laufen. Man sieht den Happy Path, Abkürzungen (ohne Kreditprüfung), Nacharbeit
 |---|---|
 | `01_sample_event_log.sql` | Erzeugt `main.process_mining.event_log` mit synthetischen Daten: 1.000 Fälle, 8 Varianten, 4 Regionen (`case_id`, `activity`, `event_ts`, …) |
 | `02_sankey_dataset.sql` | Dashboard-Dataset: ein Prozesspfad pro Zeile, Spalten `step_1` … `step_7` sind die Sankey-Stufen, `cases` ist der Wert |
-| `03_kpis_dataset.sql` | Dataset für die KPI-Kacheln: Fälle, Varianten, Ø Durchlaufzeit, Storno- und Nacharbeitsquote |
-| `process_mining_sankey.lvdash.json` | Importierbarer Dashboard-Entwurf: Region-Filter, 6 KPI-Kacheln, Sankey, Variantentabelle |
-| `mockup.html` | Interaktive Vorschau im Browser: Hover-Tooltips, Hell/Dunkel. Funktioniert ohne Databricks |
+| `03_kpis_dataset.sql` | Dataset für die KPI-Kacheln und den Trend: Fälle, Varianten, Ø Durchlaufzeit, Storno- und Nacharbeitsquote, Startzeitpunkt |
+| `04_transitions_dataset.sql` | Dataset für die Heatmaps: ein Übergang A → B pro Zeile mit Wartezeit (`LEAD()` je Fall) |
+| `05_sankey_top_variants_dataset.sql` | Sankey-Dataset nur mit den Top-5-Varianten, der Rest wird zu „Sonstige Varianten“ |
+| `process_mining_sankey.lvdash.json` | Importierbarer Dashboard-Entwurf: Region-Filter, 6 KPIs, 2 Heatmaps, Sankey Top-5, Pareto, Trend, Variantentabelle |
+| `dashboard.html` | Interaktive Vorschau der empfohlenen Dashboard-Seite: Hover-Tooltips, Hell/Dunkel |
+| `mockup.html` | Interaktive Vorschau des reinen Sankey-Dashboards |
 
 ## So funktioniert die Sankey-Logik
 
@@ -42,21 +61,25 @@ try_element_at(trace, 1) AS step_1, ..., try_element_at(trace, 7) AS step_7, COU
 2. **Variante A, Import:** *Dashboards → Create → Import dashboard from file* und
    `process_mining_sankey.lvdash.json` wählen.
 3. **Variante B, manuell**, falls der Import beim Sankey-Widget meckert:
-   * Neues Dashboard anlegen. Unter *Data* zwei Datasets aus `02_…` und `03_…` erstellen.
-   * Visualisierung hinzufügen, Typ **Sankey**, Dataset `sankey_paths`.
-     Stufen: `step_1` … `step_7`. Wert: `SUM(cases)`.
+   * Neues Dashboard anlegen. Unter *Data* je ein Dataset aus `02_…` bis `05_…` erstellen.
+   * **Heatmap** auf `transitions`: X = `to_activity`, Y = `from_activity`, Farbe = `COUNT(*)`.
+     Eine zweite Heatmap mit Farbe = `MEDIAN(wait_h)`.
+   * **Sankey** auf `sankey_top5`: Stufen `step_1` … `step_7`, Wert `SUM(cases)`.
+   * **Balken** auf `sankey_paths`: Y = `variant`, X = `SUM(cases)`, absteigend sortiert.
+   * **Linie** auf `case_kpis`: X = `case_start` (wöchentlich), Y = `AVG(throughput_days)`.
    * Zähler-Kacheln (Counter) auf `case_kpis` anlegen, z. B. `COUNT(case_id)` oder
      `AVG(is_cancelled) * 100`.
-   * Einen Multi-Select-Filter auf `region` anlegen und mit beiden Datasets verbinden.
+   * Einen Multi-Select-Filter auf `region` anlegen und mit allen Datasets verbinden.
 
-> **Hinweis:** Das genaue JSON-Schema des Sankey-Widgets (`widgetType: "sankey"`,
-> Encodings `stages` + `value`) ist von Databricks nicht öffentlich dokumentiert. Im
-> `.lvdash.json` ist es nach bestem Wissen nachgebildet. Falls nötig, das Widget im Editor
-> einmal neu konfigurieren. Datasets, Filter und Kacheln sind davon nicht betroffen.
+> **Hinweis:** Das `.lvdash.json`-Format ist von Databricks nicht öffentlich dokumentiert.
+> Die Widget-Definitionen (vor allem Sankey und Heatmap) sind nach bestem Wissen nachgebildet
+> und nicht in Databricks getestet. Falls ein Widget nach dem Import leer ist oder fehlt, im
+> Editor neu konfigurieren (Variante B). Die SQL-Datasets sind davon nicht betroffen.
 
 ## Getestet
 
-Die drei SQL-Dateien wurden lokal mit Apache Spark 4.0.1 ausgeführt. Ergebnis: 5.585 Events,
-1.000 Fälle, 8 Varianten, Ø 4,8 Tage Durchlaufzeit, 13 % Storno, 24 % Nacharbeit. Diese Zahlen
-zeigt auch das Mockup. Lokal ohne Delta musste nur `CREATE OR REPLACE TABLE` durch
+Alle SQL-Dateien wurden lokal mit Apache Spark 4.0.1 ausgeführt. Ergebnis: 5.585 Events,
+1.000 Fälle, 8 Varianten, Ø 14,5 Tage Durchlaufzeit, 13 % Storno, 24 % Nacharbeit. Die
+Mockups zeigen genau diese Ergebnisse. Die Beispieldaten enthalten typische Wartezeiten je
+Aktivität (z. B. Zahlungsziel ca. 11 Tage) und einen simulierten Lieferengpass ab Mai. Lokal ohne Delta musste nur `CREATE OR REPLACE TABLE` durch
 `CREATE TABLE` ersetzt werden.

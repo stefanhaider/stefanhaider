@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup – Process Mining Dashboard ohne App (Databricks AI/BI)</title>
+<style>
+  .viz-root {
+    color-scheme: light;
+    --page: #f3f3f1; --surface-1: #fcfcfb; --border: #e3e2de; --grid: #e1e0d9; --axis: #c3c2b7;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7975;
+    --accent: #2a78d6;
+    --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --other: #a3a29c;
+    --link-opacity: .28; --empty: #f3f2ef;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --page: #111110; --surface-1: #1a1a19; --border: #2f2f2d; --grid: #2c2c2a; --axis: #383835;
+      --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e88;
+      --accent: #3987e5; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --other: #6b6a65;
+      --link-opacity: .38; --empty: #222221;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --page: #111110; --surface-1: #1a1a19; --border: #2f2f2d; --grid: #2c2c2a; --axis: #383835;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e88;
+    --accent: #3987e5; --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --other: #6b6a65;
+    --link-opacity: .38; --empty: #222221;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .viz-root { background: var(--page); color: var(--text-primary); min-height: 100vh; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; padding: 10px 20px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
+  .crumb { color: var(--text-muted); }
+  .title { font-size: 16px; font-weight: 600; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); color: var(--text-secondary); }
+  .spacer { flex: 1; }
+  .btn { border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); padding: 5px 12px; border-radius: 4px; font: inherit; cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tabs { display: flex; gap: 20px; padding: 0 20px; background: var(--surface-1); border-bottom: 1px solid var(--border); }
+  .tab { padding: 9px 0; color: var(--text-secondary); border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--text-primary); border-bottom-color: var(--accent); font-weight: 600; }
+
+  .canvas { padding: 16px 20px 32px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; max-width: 1440px; margin: 0 auto; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; padding: 12px 14px; min-width: 0; }
+  .card h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+  .card .sub { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+  .w3 { grid-column: span 3; } .w6 { grid-column: 1 / -1; }
+  .filters { grid-column: 1 / -1; display: flex; gap: 12px; flex-wrap: wrap; padding: 10px 14px; }
+  .filter label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
+  .filter .ctl { border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px; min-width: 180px; display: flex; justify-content: space-between; gap: 8px; }
+  .filter .ctl::after { content: "▾"; color: var(--text-muted); }
+
+  .kpi .label { color: var(--text-secondary); font-size: 12px; }
+  .kpi .value { font-size: 28px; font-weight: 600; letter-spacing: -.5px; margin-top: 4px; }
+  .kpi .delta { font-size: 12px; color: var(--text-muted); }
+  .kpi .delta.warn { color: var(--text-secondary); }
+  .kpi .delta.warn::before { content: "▲ "; color: var(--series-2); }
+
+  svg { display: block; width: 100%; height: auto; overflow: visible; font-family: inherit; }
+  .axis-label { fill: var(--text-muted); font-size: 11px; }
+  .row-label { fill: var(--text-secondary); font-size: 12px; }
+  .cell-val { font-size: 11px; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .cell { stroke: var(--surface-1); stroke-width: 2; }
+  .cell:hover, .cell.hl { stroke: var(--text-primary); stroke-width: 1.5; }
+  .scale { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+  .scale .ramp { width: 160px; height: 8px; border-radius: 4px; }
+
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; flex-wrap: wrap; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+  .stage-label { fill: var(--text-muted); font-size: 11px; }
+  .node-label { fill: var(--text-primary); font-size: 12px; }
+  .node-value { fill: var(--text-secondary); font-size: 11px; }
+  .link { fill-opacity: var(--link-opacity); transition: fill-opacity .12s; }
+  .node rect { transition: opacity .12s; }
+  svg.hovering .link { fill-opacity: .08; }
+  svg.hovering .link.hl { fill-opacity: .6; }
+  svg.hovering .node:not(.hl) rect { opacity: .35; }
+
+  .bar { fill: var(--series-1); }
+  .bar-hit:hover + .bar, .bar.hl { fill-opacity: .8; }
+  .bar-label { fill: var(--text-primary); font-size: 12px; }
+  .bar-val { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .baseline { stroke: var(--axis); stroke-width: 1; }
+  .line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .event-band { fill: var(--series-2); fill-opacity: .08; }
+  .event-line { stroke: var(--series-2); stroke-width: 1; stroke-dasharray: 3 3; }
+  .event-text { fill: var(--text-secondary); font-size: 11px; }
+  .crosshair { stroke: var(--text-muted); stroke-width: 1; }
+  .dot { fill: var(--series-1); stroke: var(--surface-1); stroke-width: 2; }
+
+  .tooltip { position: fixed; pointer-events: none; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px;
+             padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); opacity: 0; transition: opacity .1s; max-width: 320px; z-index: 10; }
+  .tooltip b { font-weight: 600; } .tooltip .muted { color: var(--text-muted); }
+  .note { grid-column: 1 / -1; color: var(--text-muted); font-size: 11px; text-align: center; }
+  @media (max-width: 1000px) { .w3 { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <div class="topbar">
+    <span class="crumb">Dashboards /</span>
+    <span class="title">Process Mining – Order-to-Cash</span>
+    <span class="badge">Veröffentlicht</span>
+    <span class="spacer"></span>
+    <button class="btn" id="theme">Hell/Dunkel</button>
+    <button class="btn">Teilen</button>
+    <button class="btn primary">Veröffentlichen</button>
+  </div>
+  <div class="tabs">
+    <div class="tab active">Prozessfluss</div>
+    <div class="tab">Varianten</div>
+    <div class="tab">Durchlaufzeiten</div>
+  </div>
+
+  <div class="canvas">
+    <div class="card filters">
+      <div class="filter"><label>Zeitraum</label><div class="ctl">05.01.2026 – 05.07.2026</div></div>
+      <div class="filter"><label>Region</label><div class="ctl">Alle (4)</div></div>
+      <div class="filter"><label>Variante</label><div class="ctl">Alle (8)</div></div>
+    </div>
+
+    <div class="card kpi"><div class="label">Fälle</div><div class="value" id="k-cases"></div><div class="delta">Aufträge im Zeitraum</div></div>
+    <div class="card kpi"><div class="label">Prozessvarianten</div><div class="value" id="k-var"></div><div class="delta" id="k-var-d"></div></div>
+    <div class="card kpi"><div class="label">Ø Durchlaufzeit</div><div class="value" id="k-days"></div><div class="delta warn" id="k-days-d"></div></div>
+    <div class="card kpi"><div class="label">Ohne Abweichung</div><div class="value" id="k-happy"></div><div class="delta">Kein Storno, keine Nacharbeit</div></div>
+    <div class="card kpi"><div class="label">Stornoquote</div><div class="value" id="k-storno"></div><div class="delta" id="k-storno-d"></div></div>
+    <div class="card kpi"><div class="label">Nacharbeitsquote</div><div class="value" id="k-rework"></div><div class="delta">Mahnung, Preisänderung, Gutschrift</div></div>
+
+    <div class="card w3">
+      <h3>Prozess-Übergänge – Häufigkeit</h3>
+      <div class="sub">Visualisierung: Heatmap · Zeile: from_activity · Spalte: to_activity · Farbe: COUNT(*)</div>
+      <svg id="hm-count" role="img" aria-label="Heatmap der Übergangshäufigkeiten"></svg>
+      <div class="scale">wenige <span class="ramp" style="background:linear-gradient(90deg,color-mix(in oklab,var(--series-1) 12%,var(--surface-1)),var(--series-1))"></span> viele Übergänge</div>
+    </div>
+    <div class="card w3">
+      <h3>Prozess-Übergänge – Median-Wartezeit</h3>
+      <div class="sub">Visualisierung: Heatmap · Farbe: MEDIAN(wait_h), logarithmisch · h = Stunden, T = Tage</div>
+      <svg id="hm-wait" role="img" aria-label="Heatmap der Median-Wartezeiten je Übergang"></svg>
+      <div class="scale">kurz <span class="ramp" style="background:linear-gradient(90deg,color-mix(in oklab,var(--series-2) 12%,var(--surface-1)),var(--series-2))"></span> lang</div>
+    </div>
+
+    <div class="card w6">
+      <h3>Prozessfluss – Top‑5‑Varianten</h3>
+      <div class="sub">Visualisierung: Sankey · Stufen: step_1 … step_7 · Wert: SUM(cases) · Varianten ab Rang 6 → „Sonstige Varianten“</div>
+      <div class="legend">
+        <span style="--c: var(--series-1)">Prozessschritt</span>
+        <span style="--c: var(--series-2)">Abweichung / Nacharbeit / Storno</span>
+        <span style="--c: var(--series-3)">Erfolgreicher Abschluss</span>
+        <span style="--c: var(--other)">Sonstige Varianten</span>
+      </div>
+      <svg id="sankey" role="img" aria-label="Sankey-Diagramm der fünf häufigsten Prozessvarianten"></svg>
+    </div>
+
+    <div class="card w3">
+      <h3>Varianten nach Häufigkeit (Pareto)</h3>
+      <div class="sub">Visualisierung: Balken · Y: variant · X: SUM(cases) · Beschriftung: Anteil kumuliert</div>
+      <svg id="pareto" role="img" aria-label="Balkendiagramm der Prozessvarianten"></svg>
+    </div>
+    <div class="card w3">
+      <h3>Ø Durchlaufzeit je Startwoche</h3>
+      <div class="sub">Visualisierung: Linie · X: DATE_TRUNC('WEEK', case_start) · Y: AVG(throughput_days)</div>
+      <svg id="trend" role="img" aria-label="Liniendiagramm der durchschnittlichen Durchlaufzeit pro Woche"></svg>
+    </div>
+
+    <div class="note">Mockup mit synthetischen Daten (01_sample_event_log.sql), Werte berechnet mit den Datasets 02–05. Die Darstellung ist an Databricks AI/BI Dashboards angelehnt, aber kein Screenshot.</div>
+  </div>
+  <div class="tooltip" id="tip"></div>
+</div>
+
+<script>
+const DATA = {"kpi": {"cases": 1000.0, "variants": 8.0, "avg_days": 14.5, "med_days": 14.2, "storno": 13.0, "rework": 24.0}, "paths": [{"variant": "Auftrag angelegt → Kreditprüfung → Auftrag freigegeben → Lieferung → Rechnung gestellt → Zahlung erhalten", "cases": 420, "days": 14.7}, {"variant": "Auftrag angelegt → Auftrag freigegeben → Lieferung → Rechnung gestellt → Zahlung erhalten", "cases": 210, "days": 14.0}, {"variant": "Auftrag angelegt → Kreditprüfung → Auftrag freigegeben → Lieferung → Rechnung gestellt → Mahnung → Zahlung erhalten", "cases": 130, "days": 28.8}, {"variant": "Auftrag angelegt → Kreditprüfung → Storniert", "cases": 70, "days": 1.5}, {"variant": "Auftrag angelegt → Auftrag freigegeben → Preisänderung → Auftrag freigegeben → Lieferung → Rechnung gestellt → Zahlung erhalten", "cases": 60, "days": 16.4}, {"variant": "Auftrag angelegt → Auftrag freigegeben → Lieferung → Rechnung gestellt → Gutschrift", "cases": 50, "days": 7.5}, {"variant": "Auftrag angelegt → Kreditprüfung → Auftrag freigegeben → Lieferung → Storniert", "cases": 35, "days": 5.2}, {"variant": "Auftrag angelegt → Storniert", "cases": 25, "days": 1.2}], "trans": [{"f": "Auftrag freigegeben", "t": "Lieferung", "n": 905, "med": 61.0}, {"f": "Lieferung", "t": "Rechnung gestellt", "n": 870, "med": 8.0}, {"f": "Zahlung erhalten", "t": "■ Ende", "n": 820, "med": null}, {"f": "Rechnung gestellt", "t": "Zahlung erhalten", "n": 690, "med": 257.0}, {"f": "Auftrag angelegt", "t": "Kreditprüfung", "n": 655, "med": 6.0}, {"f": "Kreditprüfung", "t": "Auftrag freigegeben", "n": 585, "med": 10.0}, {"f": "Auftrag angelegt", "t": "Auftrag freigegeben", "n": 320, "med": 10.0}, {"f": "Storniert", "t": "■ Ende", "n": 130, "med": null}, {"f": "Rechnung gestellt", "t": "Mahnung", "n": 130, "med": 323.0}, {"f": "Mahnung", "t": "Zahlung erhalten", "n": 130, "med": 273.0}, {"f": "Kreditprüfung", "t": "Storniert", "n": 70, "med": 32.0}, {"f": "Auftrag freigegeben", "t": "Preisänderung", "n": 60, "med": 30.0}, {"f": "Preisänderung", "t": "Auftrag freigegeben", "n": 60, "med": 10.0}, {"f": "Rechnung gestellt", "t": "Gutschrift", "n": 50, "med": 98.0}, {"f": "Gutschrift", "t": "■ Ende", "n": 50, "med": null}, {"f": "Lieferung", "t": "Storniert", "n": 35, "med": 28.0}, {"f": "Auftrag angelegt", "t": "Storniert", "n": 25, "med": 30.0}], "top": [{"step_1": "Auftrag angelegt", "step_2": "Kreditprüfung", "step_3": "Auftrag freigegeben", "step_4": "Lieferung", "step_5": "Rechnung gestellt", "step_6": "Zahlung erhalten", "step_7": null, "cases": 420}, {"step_1": "Auftrag angelegt", "step_2": "Auftrag freigegeben", "step_3": "Lieferung", "step_4": "Rechnung gestellt", "step_5": "Zahlung erhalten", "step_6": null, "step_7": null, "cases": 210}, {"step_1": "Auftrag angelegt", "step_2": "Kreditprüfung", "step_3": "Auftrag freigegeben", "step_4": "Lieferung", "step_5": "Rechnung gestellt", "step_6": "Mahnung", "step_7": "Zahlung erhalten", "cases": 130}, {"step_1": "Auftrag angelegt", "step_2": "Sonstige Varianten", "step_3": null, "step_4": null, "step_5": null, "step_6": null, "step_7": null, "cases": 110}, {"step_1": "Auftrag angelegt", "step_2": "Kreditprüfung", "step_3": "Storniert", "step_4": null, "step_5": null, "step_6": null, "step_7": null, "cases": 70}, {"step_1": "Auftrag angelegt", "step_2": "Auftrag freigegeben", "step_3": "Preisänderung", "step_4": "Auftrag freigegeben", "step_5": "Lieferung", "step_6": "Rechnung gestellt", "step_7": "Zahlung erhalten", "cases": 60}], "weekly": [{"wk": "2026-01-05", "n": 49, "days": 13.0}, {"wk": "2026-01-12", "n": 42, "days": 11.5}, {"wk": "2026-01-19", "n": 36, "days": 15.0}, {"wk": "2026-01-26", "n": 37, "days": 13.7}, {"wk": "2026-02-02", "n": 32, "days": 13.1}, {"wk": "2026-02-09", "n": 31, "days": 13.8}, {"wk": "2026-02-16", "n": 28, "days": 13.6}, {"wk": "2026-02-23", "n": 48, "days": 15.2}, {"wk": "2026-03-02", "n": 39, "days": 14.7}, {"wk": "2026-03-09", "n": 49, "days": 13.4}, {"wk": "2026-03-16", "n": 35, "days": 14.9}, {"wk": "2026-03-23", "n": 55, "days": 15.9}, {"wk": "2026-03-30", "n": 35, "days": 13.0}, {"wk": "2026-04-06", "n": 33, "days": 12.1}, {"wk": "2026-04-13", "n": 35, "days": 12.9}, {"wk": "2026-04-20", "n": 47, "days": 12.5}, {"wk": "2026-04-27", "n": 26, "days": 15.3}, {"wk": "2026-05-04", "n": 46, "days": 14.7}, {"wk": "2026-05-11", "n": 34, "days": 16.7}, {"wk": "2026-05-18", "n": 38, "days": 15.7}, {"wk": "2026-05-25", "n": 37, "days": 14.6}, {"wk": "2026-06-01", "n": 41, "days": 15.6}, {"wk": "2026-06-08", "n": 31, "days": 17.1}, {"wk": "2026-06-15", "n": 29, "days": 15.4}, {"wk": "2026-06-22", "n": 48, "days": 17.6}, {"wk": "2026-06-29", "n": 39, "days": 16.9}]};
+
+const NS = "http://www.w3.org/2000/svg";
+const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag);
+  for (const [a, v] of Object.entries(attrs)) e.setAttribute(a, v); parent.appendChild(e); return e; };
+const txt = (parent, attrs, s) => { const t = el("text", attrs, parent); t.textContent = s; return t; };
+const fmt = (n, d = 0) => Number(n).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtWait = h => h == null ? "" : h < 48 ? fmt(h) + " h" : fmt(h / 24, 1) + " T";
+const tipEl = document.getElementById("tip");
+function showTip(e, html) {
+  tipEl.innerHTML = html; tipEl.style.opacity = 1;
+  tipEl.style.left = Math.min(e.clientX + 14, innerWidth - tipEl.offsetWidth - 8) + "px";
+  tipEl.style.top = (e.clientY + 14) + "px";
+}
+const hideTip = () => tipEl.style.opacity = 0;
+
+// ---------------- KPIs ----------------
+const K = DATA.kpi, TOTAL = K.cases;
+const weekly = DATA.weekly;
+const avgOf = rows => rows.reduce((s, r) => s + r.days * r.n, 0) / rows.reduce((s, r) => s + r.n, 0);
+const before = avgOf(weekly.filter(r => r.wk < "2026-05-01")), after = avgOf(weekly.filter(r => r.wk >= "2026-05-01"));
+document.getElementById("k-cases").textContent = fmt(K.cases);
+document.getElementById("k-var").textContent = fmt(K.variants);
+document.getElementById("k-var-d").textContent = "Top‑3 decken " + fmt((DATA.paths[0].cases + DATA.paths[1].cases + DATA.paths[2].cases) / TOTAL * 100, 0) + " % ab";
+document.getElementById("k-days").textContent = fmt(K.avg_days, 1) + " Tage";
+document.getElementById("k-days-d").textContent = "seit Mai " + fmt(after, 1) + " T (vorher " + fmt(before, 1) + " T)";
+document.getElementById("k-happy").textContent = fmt(100 - K.storno - K.rework, 1) + " %";
+document.getElementById("k-storno").textContent = fmt(K.storno, 1) + " %";
+document.getElementById("k-storno-d").textContent = fmt(K.storno * TOTAL / 100) + " Fälle storniert";
+document.getElementById("k-rework").textContent = fmt(K.rework, 1) + " %";
+
+// ---------------- Heatmaps ----------------
+const ACTS = ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Preisänderung","Lieferung","Rechnung gestellt",
+              "Mahnung","Zahlung erhalten","Gutschrift","Storniert"];
+const ROWS = ACTS, COLS = [...ACTS.slice(1), "■ Ende"];
+const T = new Map(DATA.trans.map(r => [r.f + "→" + r.t, r]));
+function heatmap(svgId, hue, valueOf, label, scaleFn, tipFn) {
+  const svg = document.getElementById(svgId);
+  const left = 132, top = 92, cw = 46, ch = 28;
+  const W = left + COLS.length * cw, H = top + ROWS.length * ch;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const vals = DATA.trans.map(valueOf).filter(v => v != null);
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  COLS.forEach((c, j) => txt(svg, { x: left + j * cw + cw / 2, y: top - 8, class: "axis-label",
+    transform: `rotate(-45 ${left + j * cw + cw / 2} ${top - 8})` }, c));
+  txt(svg, { x: 0, y: 12, class: "axis-label" }, "von ↓   nach →");
+  ROWS.forEach((r, i) => {
+    txt(svg, { x: left - 8, y: top + i * ch + ch / 2 + 4, class: "row-label", "text-anchor": "end" }, r);
+    COLS.forEach((c, j) => {
+      const d = T.get(r + "→" + c), v = d ? valueOf(d) : null;
+      const x = left + j * cw, y = top + i * ch;
+      if (v == null) { el("rect", { x, y, width: cw, height: ch, fill: "var(--empty)", class: "cell" }, svg); return; }
+      const t = scaleFn(v, lo, hi), pct = Math.round(12 + t * 88);
+      const rect = el("rect", { x, y, width: cw, height: ch, rx: 3, class: "cell",
+        fill: `color-mix(in oklab, var(${hue}) ${pct}%, var(--surface-1))` }, svg);
+      txt(svg, { x: x + cw / 2, y: y + ch / 2 + 4, "text-anchor": "middle", class: "cell-val",
+        fill: t > 0.5 ? "#fff" : "var(--text-primary)" }, label(v));
+      rect.addEventListener("mousemove", e => showTip(e, tipFn(d)));
+      rect.addEventListener("mouseleave", hideTip);
+    });
+  });
+}
+const tipTrans = d => `<b>${d.f} → ${d.t}</b><br>${fmt(d.n)} Übergänge` +
+  (d.med != null ? `<br>Median-Wartezeit: ${fmt(d.med)} h (${fmt(d.med / 24, 1)} Tage)` : `<br><span class="muted">Fall endet hier</span>`);
+heatmap("hm-count", "--series-1", d => d.n, v => fmt(v), (v, lo, hi) => Math.sqrt((v - lo) / (hi - lo)), tipTrans);
+heatmap("hm-wait", "--series-2", d => d.med, fmtWait, (v, lo, hi) => Math.log(v / lo) / Math.log(hi / lo), tipTrans);
+
+// ---------------- Sankey (Top-5 + Sonstige) ----------------
+(function sankey() {
+  const PATHS = DATA.top.map(r => ({ cases: r.cases, steps: [r.step_1, r.step_2, r.step_3, r.step_4, r.step_5, r.step_6, r.step_7].filter(Boolean) }));
+  const ORDER = ["Auftrag angelegt","Kreditprüfung","Auftrag freigegeben","Preisänderung","Lieferung","Rechnung gestellt",
+                 "Mahnung","Zahlung erhalten","Gutschrift","Storniert","Sonstige Varianten"];
+  const GROUP = a => a === "Zahlung erhalten" ? "var(--series-3)" : a === "Sonstige Varianten" ? "var(--other)"
+                   : ["Mahnung","Preisänderung","Gutschrift","Storniert"].includes(a) ? "var(--series-2)" : "var(--series-1)";
+  const svg = document.getElementById("sankey");
+  const nStages = Math.max(...PATHS.map(p => p.steps.length));
+  const nodes = new Map(), links = new Map();
+  for (const p of PATHS) p.steps.forEach((a, i) => {
+    const id = i + "|" + a;
+    if (!nodes.has(id)) nodes.set(id, { id, stage: i, name: a, value: 0, in: [], out: [], ends: 0 });
+    nodes.get(id).value += p.cases;
+    if (i === p.steps.length - 1 && i < nStages - 1) nodes.get(id).ends += p.cases;
+    if (i > 0) { const s = (i - 1) + "|" + p.steps[i - 1], lid = s + ">" + a;
+      if (!links.has(lid)) links.set(lid, { source: s, target: id, value: 0 }); links.get(lid).value += p.cases; }
+  });
+  links.forEach(l => { nodes.get(l.source).out.push(l); nodes.get(l.target).in.push(l); });
+  const W = 1360, H = 360, padTop = 26, nodeW = 12, pad = 22, labelRoom = 150;
+  const colX = i => i * (W - labelRoom - nodeW) / (nStages - 1);
+  const stages = [...Array(nStages)].map((_, i) => [...nodes.values()].filter(n => n.stage === i).sort((a, b) => ORDER.indexOf(a.name) - ORDER.indexOf(b.name)));
+  const maxN = Math.max(...stages.map(s => s.length));
+  const k = (H - padTop - (maxN - 1) * pad) / TOTAL;
+  stages.forEach(s => { let y = padTop; s.forEach(n => { n.x = colX(n.stage); n.y = y; n.h = n.value * k; y += n.h + pad; }); });
+  nodes.forEach(n => {
+    n.out.sort((a, b) => nodes.get(a.target).y - nodes.get(b.target).y);
+    n.in.sort((a, b) => nodes.get(a.source).y - nodes.get(b.source).y);
+    let y0 = n.y; n.out.forEach(l => { l.y0 = y0; y0 += l.value * k; });
+    let y1 = n.y; n.in.forEach(l => { l.y1 = y1; y1 += l.value * k; });
+  });
+  svg.setAttribute("viewBox", `0 0 ${W} ${H + 6}`);
+  for (let i = 0; i < nStages; i++) txt(svg, { x: colX(i), y: 12, class: "stage-label" }, "Schritt " + (i + 1));
+  const gL = el("g", {}, svg), gN = el("g", {}, svg);
+  const pct = n => fmt(n / TOTAL * 100, 1) + " %";
+  function hover(target, html, linkEls, nodeEls) {
+    target.addEventListener("mousemove", e => { svg.classList.add("hovering");
+      linkEls().forEach(x => x.classList.add("hl")); nodeEls().forEach(x => x.classList.add("hl")); showTip(e, html); });
+    target.addEventListener("mouseleave", () => { svg.classList.remove("hovering"); hideTip();
+      svg.querySelectorAll(".hl").forEach(x => x.classList.remove("hl")); });
+  }
+  nodes.forEach(n => n.g = el("g", { class: "node" }, gN));
+  links.forEach(l => {
+    const s = nodes.get(l.source), t = nodes.get(l.target), h = l.value * k, x0 = s.x + nodeW, x1 = t.x, xm = (x0 + x1) / 2;
+    l.el = el("path", { class: "link", fill: GROUP(t.name === "Sonstige Varianten" ? t.name : s.name),
+      d: `M${x0},${l.y0} C${xm},${l.y0} ${xm},${l.y1} ${x1},${l.y1} L${x1},${l.y1 + h} C${xm},${l.y1 + h} ${xm},${l.y0 + h} ${x0},${l.y0 + h} Z` }, gL);
+    hover(l.el, `<b>${s.name} → ${t.name}</b><br>${fmt(l.value)} Fälle · ${pct(l.value)}`, () => [l.el], () => [s.g, t.g]);
+  });
+  nodes.forEach(n => {
+    el("rect", { x: n.x, y: n.y, width: nodeW, height: Math.max(n.h, 1.5), rx: 2, fill: GROUP(n.name) }, n.g);
+    const cy = n.y + n.h / 2, lx = n.x + nodeW + 6;
+    txt(n.g, { x: lx, y: cy - 1, class: "node-label" }, n.name);
+    txt(n.g, { x: lx, y: cy + 12, class: "node-value" }, fmt(n.value) + " · " + pct(n.value));
+    el("rect", { x: n.x - 4, y: n.y - 3, width: nodeW + 8, height: Math.max(n.h, 1.5) + 6, fill: "transparent" }, n.g);
+    hover(n.g, `<b>${n.name}</b> <span class="muted">(Schritt ${n.stage + 1})</span><br>${fmt(n.value)} Fälle · ${pct(n.value)}` +
+      (n.ends ? `<br><span class="muted">davon enden hier: ${fmt(n.ends)}</span>` : ""), () => [...n.in, ...n.out].map(l => l.el), () => [n.g]);
+  });
+})();
+
+// ---------------- Pareto ----------------
+(function pareto() {
+  const SHORT = ["Standard mit Kreditprüfung","Standard ohne Kreditprüfung","Mit Mahnung","Storno nach Kreditprüfung",
+                 "Mit Preisänderung","Mit Gutschrift","Storno nach Lieferung","Sofort-Storno"];
+  const svg = document.getElementById("pareto");
+  const left = 190, right = 120, barH = 18, gap = 12, top = 6, W = 640;
+  const rows = DATA.paths, H = top + rows.length * (barH + gap) + 16;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const max = rows[0].cases, sx = v => v / max * (W - left - right);
+  [0, .25, .5, .75, 1].forEach(t => el("line", { x1: left + t * (W - left - right), x2: left + t * (W - left - right), y1: 0, y2: H - 16, class: "gridline" }, svg));
+  let cum = 0;
+  rows.forEach((r, i) => {
+    cum += r.cases;
+    const y = top + i * (barH + gap), w = sx(r.cases);
+    txt(svg, { x: left - 8, y: y + barH / 2 + 4, class: "bar-label", "text-anchor": "end" }, (i + 1) + "  " + (SHORT[i] || r.variant));
+    const hit = el("rect", { x: 0, y: y - gap / 2, width: W, height: barH + gap, fill: "transparent", class: "bar-hit" }, svg);
+    el("path", { class: "bar", d: `M${left},${y} h${w - 4} a4,4 0 0 1 4,4 v${barH - 8} a4,4 0 0 1 -4,4 h${-(w - 4)} Z` }, svg);
+    txt(svg, { x: left + w + 6, y: y + barH / 2 + 4, class: "bar-val" }, fmt(r.cases) + " · kum. " + fmt(cum / TOTAL * 100) + " %");
+    const c = cum;
+    hit.addEventListener("mousemove", e => showTip(e, `<b>Variante ${i + 1}: ${SHORT[i]}</b><br>${r.variant}<br>${fmt(r.cases)} Fälle · ${fmt(r.cases / TOTAL * 100, 1)} % · kumuliert ${fmt(c / TOTAL * 100, 1)} %<br>Ø Durchlaufzeit ${fmt(r.days, 1)} Tage`));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+  el("line", { x1: left, x2: left, y1: 0, y2: H - 16, class: "baseline" }, svg);
+  [0, .5, 1].forEach(t => txt(svg, { x: left + t * (W - left - right), y: H - 2, class: "axis-label", "text-anchor": "middle" }, fmt(max * t)));
+})();
+
+// ---------------- Trend ----------------
+(function trend() {
+  const svg = document.getElementById("trend");
+  const W = 640, H = 300, l = 34, r = 12, t = 26, b = 26;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const n = weekly.length, yMax = 20;
+  const x = i => l + i * (W - l - r) / (n - 1), y = v => t + (1 - v / yMax) * (H - t - b);
+  const kw = d => { const dt = new Date(d + "T00:00:00Z"); const th = new Date(dt); th.setUTCDate(dt.getUTCDate() + 3 - (dt.getUTCDay() + 6) % 7);
+    const w1 = new Date(Date.UTC(th.getUTCFullYear(), 0, 4)); return 1 + Math.round(((th - w1) / 864e5 - 3 + (w1.getUTCDay() + 6) % 7) / 7); };
+  const iMay = weekly.findIndex(r => r.wk >= "2026-05-01");
+  el("rect", { x: x(iMay), y: t, width: x(n - 1) - x(iMay), height: H - t - b, class: "event-band" }, svg);
+  [0, 5, 10, 15, 20].forEach(v => { el("line", { x1: l, x2: W - r, y1: y(v), y2: y(v), class: v ? "gridline" : "baseline" }, svg);
+    txt(svg, { x: l - 6, y: y(v) + 4, class: "axis-label", "text-anchor": "end" }, v); });
+  txt(svg, { x: 0, y: 8, class: "axis-label" }, "Tage");
+  weekly.forEach((r, i) => { if (i % 4 === 0) txt(svg, { x: x(i), y: H - 6, class: "axis-label", "text-anchor": "middle" }, "KW " + kw(r.wk)); });
+  el("line", { x1: x(iMay), x2: x(iMay), y1: t, y2: H - b, class: "event-line" }, svg);
+  txt(svg, { x: x(iMay) + 6, y: t + 12, class: "event-text" }, "Lieferengpass ab Mai");
+  el("path", { class: "line", d: weekly.map((r, i) => (i ? "L" : "M") + x(i) + "," + y(r.days)).join("") }, svg);
+  const ch = el("line", { y1: t, y2: H - b, class: "crosshair", opacity: 0 }, svg);
+  const dot = el("circle", { r: 4.5, class: "dot", opacity: 0 }, svg);
+  const hit = el("rect", { x: l, y: t, width: W - l - r, height: H - t - b, fill: "transparent" }, svg);
+  hit.addEventListener("mousemove", e => {
+    const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; const sp = p.matrixTransform(svg.getScreenCTM().inverse());
+    const i = Math.max(0, Math.min(n - 1, Math.round((sp.x - l) / (W - l - r) * (n - 1)))), rw = weekly[i];
+    ch.setAttribute("x1", x(i)); ch.setAttribute("x2", x(i)); ch.setAttribute("opacity", 1);
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(rw.days)); dot.setAttribute("opacity", 1);
+    const d = new Date(rw.wk + "T00:00:00Z");
+    showTip(e, `<b>KW ${kw(rw.wk)}</b> <span class="muted">ab ${d.toLocaleDateString("de-DE", { timeZone: "UTC" })}</span><br>Ø Durchlaufzeit: ${fmt(rw.days, 1)} Tage<br><span class="muted">${fmt(rw.n)} gestartete Fälle</span>`);
+  });
+  hit.addEventListener("mouseleave", () => { ch.setAttribute("opacity", 0); dot.setAttribute("opacity", 0); hideTip(); });
+})();
+
+document.getElementById("theme").onclick = () => {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark";
+};
+</script>
+</body>
+</html>
