@@ -1,0 +1,524 @@
+{
+  "datasets": [
+    {
+      "name": "sankey_paths",
+      "displayName": "Sankey – Prozesspfade",
+      "queryLines": [
+        "WITH traces AS (\n",
+        "  SELECT\n",
+        "    case_id,\n",
+        "    region,\n",
+        "    transform(array_sort(collect_list(struct(event_ts, step_no, activity))), x -> x.activity) AS trace,\n",
+        "    timestampdiff(HOUR, min(event_ts), max(event_ts)) / 24.0 AS throughput_days\n",
+        "  FROM main.process_mining.event_log\n",
+        "  GROUP BY case_id, region\n",
+        ")\n",
+        "SELECT\n",
+        "  region,\n",
+        "  try_element_at(trace, 1) AS step_1,\n",
+        "  try_element_at(trace, 2) AS step_2,\n",
+        "  try_element_at(trace, 3) AS step_3,\n",
+        "  try_element_at(trace, 4) AS step_4,\n",
+        "  try_element_at(trace, 5) AS step_5,\n",
+        "  try_element_at(trace, 6) AS step_6,\n",
+        "  try_element_at(trace, 7) AS step_7,\n",
+        "  array_join(trace, ' → ')                 AS variant,\n",
+        "  COUNT(*)                                 AS cases,\n",
+        "  ROUND(AVG(throughput_days), 1)           AS avg_throughput_days\n",
+        "FROM traces\n",
+        "GROUP BY ALL\n"
+      ]
+    },
+    {
+      "name": "case_kpis",
+      "displayName": "KPIs je Fall",
+      "queryLines": [
+        "WITH traces AS (\n",
+        "  SELECT\n",
+        "    case_id, region,\n",
+        "    array_join(transform(array_sort(collect_list(struct(event_ts, step_no, activity))), x -> x.activity), '|') AS variant,\n",
+        "    timestampdiff(HOUR, min(event_ts), max(event_ts)) / 24.0 AS throughput_days,\n",
+        "    max(CASE WHEN activity = 'Storniert' THEN 1 ELSE 0 END) AS is_cancelled,\n",
+        "    max(CASE WHEN activity IN ('Mahnung','Preisänderung','Gutschrift') THEN 1 ELSE 0 END) AS has_rework\n",
+        "  FROM main.process_mining.event_log\n",
+        "  GROUP BY case_id, region\n",
+        ")\n",
+        "SELECT region, case_id, variant, throughput_days, is_cancelled, has_rework\n",
+        "FROM traces\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "prozessfluss",
+      "displayName": "Prozessfluss",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_region",
+            "queries": [
+              {
+                "name": "f_sankey",
+                "query": {
+                  "datasetName": "sankey_paths",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_kpis",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "f_sankey"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "f_kpis"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Region"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_cases",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "count(case_id)",
+                      "expression": "COUNT(`case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "count(case_id)",
+                  "displayName": "Fälle"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fälle"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_variants",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "countdistinct(variant)",
+                      "expression": "COUNT(DISTINCT `variant`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "countdistinct(variant)",
+                  "displayName": "Prozessvarianten"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozessvarianten"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_throughput",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "avg(throughput_days)",
+                      "expression": "ROUND(AVG(`throughput_days`), 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(throughput_days)",
+                  "displayName": "Ø Durchlaufzeit (Tage)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ø Durchlaufzeit (Tage)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_happy",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "happy_pct",
+                      "expression": "ROUND(100 - AVG(GREATEST(`is_cancelled`, `has_rework`)) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "happy_pct",
+                  "displayName": "Ohne Abweichung (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ohne Abweichung (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_storno",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "avg(is_cancelled)",
+                      "expression": "ROUND(AVG(`is_cancelled`) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(is_cancelled)",
+                  "displayName": "Stornoquote (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Stornoquote (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_rework",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_kpis",
+                  "fields": [
+                    {
+                      "name": "avg(has_rework)",
+                      "expression": "ROUND(AVG(`has_rework`) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(has_rework)",
+                  "displayName": "Nacharbeitsquote (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Nacharbeitsquote (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "sankey_process_flow",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sankey_paths",
+                  "fields": [
+                    {
+                      "name": "step_1",
+                      "expression": "`step_1`"
+                    },
+                    {
+                      "name": "step_2",
+                      "expression": "`step_2`"
+                    },
+                    {
+                      "name": "step_3",
+                      "expression": "`step_3`"
+                    },
+                    {
+                      "name": "step_4",
+                      "expression": "`step_4`"
+                    },
+                    {
+                      "name": "step_5",
+                      "expression": "`step_5`"
+                    },
+                    {
+                      "name": "step_6",
+                      "expression": "`step_6`"
+                    },
+                    {
+                      "name": "step_7",
+                      "expression": "`step_7`"
+                    },
+                    {
+                      "name": "sum(cases)",
+                      "expression": "SUM(`cases`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "sankey",
+              "encodings": {
+                "stages": [
+                  {
+                    "fieldName": "step_1",
+                    "displayName": "Schritt 1"
+                  },
+                  {
+                    "fieldName": "step_2",
+                    "displayName": "Schritt 2"
+                  },
+                  {
+                    "fieldName": "step_3",
+                    "displayName": "Schritt 3"
+                  },
+                  {
+                    "fieldName": "step_4",
+                    "displayName": "Schritt 4"
+                  },
+                  {
+                    "fieldName": "step_5",
+                    "displayName": "Schritt 5"
+                  },
+                  {
+                    "fieldName": "step_6",
+                    "displayName": "Schritt 6"
+                  },
+                  {
+                    "fieldName": "step_7",
+                    "displayName": "Schritt 7"
+                  }
+                ],
+                "value": {
+                  "fieldName": "sum(cases)",
+                  "displayName": "Fälle"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozessfluss (Sankey) – Fälle je Prozessschritt"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "table_variants",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "sankey_paths",
+                  "fields": [
+                    {
+                      "name": "variant",
+                      "expression": "`variant`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "`cases`"
+                    },
+                    {
+                      "name": "avg_throughput_days",
+                      "expression": "`avg_throughput_days`"
+                    },
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "variant",
+                    "displayName": "Variante"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region"
+                  },
+                  {
+                    "fieldName": "cases",
+                    "displayName": "Fälle"
+                  },
+                  {
+                    "fieldName": "avg_throughput_days",
+                    "displayName": "Ø Durchlaufzeit (Tage)"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozessvarianten"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 6,
+            "height": 7
+          }
+        }
+      ]
+    }
+  ]
+}
