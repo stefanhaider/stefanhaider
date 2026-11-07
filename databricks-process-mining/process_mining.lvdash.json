@@ -1,0 +1,760 @@
+{
+  "datasets": [
+    {
+      "name": "conformance_cases",
+      "displayName": "Konformität je Fall",
+      "queryLines": [
+        "WITH seq AS (\n",
+        "  SELECT\n",
+        "    case_id, region, activity, event_ts,\n",
+        "    LAG(activity)  OVER w AS prev_activity,\n",
+        "    LEAD(activity) OVER w AS next_activity\n",
+        "  FROM main.process_mining.event_log\n",
+        "  WINDOW w AS (PARTITION BY case_id ORDER BY event_ts, step_no)\n",
+        "),\n",
+        "trans AS (\n",
+        "  SELECT case_id, region, activity AS src, COALESCE(next_activity, '■ Ende') AS tgt, event_ts FROM seq\n",
+        "  UNION ALL\n",
+        "  SELECT case_id, region, '▶ Start', activity, event_ts FROM seq WHERE prev_activity IS NULL\n",
+        "),\n",
+        "checked AS (\n",
+        "  SELECT t.*, m.src IS NOT NULL AS is_allowed\n",
+        "  FROM trans t\n",
+        "  LEFT JOIN main.process_mining.process_model_transitions m ON m.src = t.src AND m.tgt = t.tgt\n",
+        ")\n",
+        "SELECT\n",
+        "  case_id,\n",
+        "  region,\n",
+        "  MIN(event_ts)                                                   AS case_start,\n",
+        "  timestampdiff(HOUR, MIN(event_ts), MAX(event_ts)) / 24.0        AS throughput_days,\n",
+        "  CAST(BOOL_AND(is_allowed) AS INT)                               AS is_conformant,\n",
+        "  COUNT_IF(NOT is_allowed)                                        AS n_deviating_transitions,\n",
+        "  array_join(array_sort(collect_set(IF(NOT is_allowed, concat(src, ' → ', tgt), NULL))), ' | ') AS deviations\n",
+        "FROM checked\n",
+        "GROUP BY case_id, region\n"
+      ]
+    },
+    {
+      "name": "deviations",
+      "displayName": "Unzulässige Übergänge (Vorkommen)",
+      "queryLines": [
+        "WITH seq AS (\n",
+        "  SELECT\n",
+        "    case_id, region, activity, event_ts,\n",
+        "    LAG(activity)  OVER w AS prev_activity,\n",
+        "    LEAD(activity) OVER w AS next_activity,\n",
+        "    LEAD(event_ts) OVER w AS next_ts\n",
+        "  FROM main.process_mining.event_log\n",
+        "  WINDOW w AS (PARTITION BY case_id ORDER BY event_ts, step_no)\n",
+        "),\n",
+        "trans AS (\n",
+        "  SELECT case_id, region, activity AS src, COALESCE(next_activity, '■ Ende') AS tgt,\n",
+        "         COALESCE(next_ts, event_ts) AS event_ts FROM seq\n",
+        "  UNION ALL\n",
+        "  SELECT case_id, region, '▶ Start', activity, event_ts FROM seq WHERE prev_activity IS NULL\n",
+        ")\n",
+        "SELECT\n",
+        "  t.case_id,\n",
+        "  t.region,\n",
+        "  t.src,\n",
+        "  t.tgt,\n",
+        "  concat(t.src, ' → ', t.tgt) AS transition,\n",
+        "  t.event_ts,\n",
+        "  CASE\n",
+        "    WHEN ms.activity IS NULL OR mt.activity IS NULL THEN 'Zusätzliche Aktivität'\n",
+        "    WHEN t.tgt = '■ Ende'                           THEN 'Kein gültiger Abschluss'\n",
+        "    WHEN mt.is_terminal                             THEN 'Abbruch an unzulässiger Stelle'\n",
+        "    WHEN mt.step_order <= ms.step_order             THEN 'Rücksprung / Wiederholung'\n",
+        "    WHEN mt.step_order >  ms.step_order + 1         THEN 'Schritt übersprungen'\n",
+        "    ELSE 'Unzulässiger Übergang'\n",
+        "  END AS deviation_type\n",
+        "FROM trans t\n",
+        "LEFT JOIN main.process_mining.process_model_transitions m  ON m.src = t.src AND m.tgt = t.tgt\n",
+        "LEFT JOIN main.process_mining.process_model_activities  ms ON ms.activity = t.src\n",
+        "LEFT JOIN main.process_mining.process_model_activities  mt ON mt.activity = t.tgt\n",
+        "WHERE m.src IS NULL\n"
+      ]
+    },
+    {
+      "name": "deviation_summary",
+      "displayName": "Unzulässige Übergänge (Zusammenfassung)",
+      "queryLines": [
+        "WITH ev AS (\n",
+        "  SELECT * FROM main.process_mining.event_log\n",
+        "),\n",
+        "starts AS (\n",
+        "  SELECT case_id, MIN(event_ts) AS case_start FROM ev GROUP BY case_id\n",
+        "),\n",
+        "seq AS (\n",
+        "  SELECT case_id, activity, event_ts,\n",
+        "         LAG(activity)  OVER w AS prev_activity,\n",
+        "         LEAD(activity) OVER w AS next_activity,\n",
+        "         LEAD(event_ts) OVER w AS next_ts\n",
+        "  FROM ev\n",
+        "  WINDOW w AS (PARTITION BY case_id ORDER BY event_ts, step_no)\n",
+        "),\n",
+        "trans AS (\n",
+        "  SELECT case_id, activity AS src, COALESCE(next_activity, '■ Ende') AS tgt, COALESCE(next_ts, event_ts) AS event_ts FROM seq\n",
+        "  UNION ALL\n",
+        "  SELECT case_id, '▶ Start', activity, event_ts FROM seq WHERE prev_activity IS NULL\n",
+        "),\n",
+        "dev AS (\n",
+        "  SELECT t.*, st.case_start,\n",
+        "    CASE\n",
+        "      WHEN ms.activity IS NULL OR mt.activity IS NULL THEN 'Zusätzliche Aktivität'\n",
+        "      WHEN t.tgt = '■ Ende'                           THEN 'Kein gültiger Abschluss'\n",
+        "      WHEN mt.is_terminal                             THEN 'Abbruch an unzulässiger Stelle'\n",
+        "      WHEN mt.step_order <= ms.step_order             THEN 'Rücksprung / Wiederholung'\n",
+        "      WHEN mt.step_order >  ms.step_order + 1         THEN 'Schritt übersprungen'\n",
+        "      ELSE 'Unzulässiger Übergang'\n",
+        "    END AS deviation_type\n",
+        "  FROM trans t\n",
+        "  LEFT JOIN main.process_mining.process_model_transitions m  ON m.src = t.src AND m.tgt = t.tgt\n",
+        "  LEFT JOIN main.process_mining.process_model_activities  ms ON ms.activity = t.src\n",
+        "  LEFT JOIN main.process_mining.process_model_activities  mt ON mt.activity = t.tgt\n",
+        "  JOIN starts st ON st.case_id = t.case_id\n",
+        "  WHERE m.src IS NULL\n",
+        "    AND NOT (ms.activity IS NULL AND mt.activity IS NOT NULL)   -- Weg aus Zusatz-Aktivität zurück: nicht doppelt zählen\n",
+        "),\n",
+        "ref AS (\n",
+        "  SELECT recent_from, COUNT(*) AS all_cases, COUNT_IF(case_start >= recent_from) AS recent_cases\n",
+        "  FROM starts CROSS JOIN (SELECT MAX(case_start) - INTERVAL 28 DAYS AS recent_from FROM starts)\n",
+        "  GROUP BY recent_from\n",
+        ")\n",
+        "SELECT\n",
+        "  d.deviation_type,\n",
+        "  concat(d.src, ' → ', d.tgt)                                    AS transition,\n",
+        "  COUNT(DISTINCT d.case_id)                                      AS cases,\n",
+        "  ROUND(COUNT(DISTINCT d.case_id) * 100.0 / r.all_cases, 1)      AS pct_of_cases,\n",
+        "  CAST(MIN(d.event_ts) AS DATE)                                  AS first_seen,\n",
+        "  CAST(MAX(d.event_ts) AS DATE)                                  AS last_seen,\n",
+        "  COUNT(DISTINCT IF(d.case_start >= r.recent_from, d.case_id, NULL))                       AS cases_last_4w,\n",
+        "  ROUND(COUNT(DISTINCT IF(d.case_start >= r.recent_from, d.case_id, NULL)) * 100.0 / r.recent_cases, 1) AS pct_last_4w,\n",
+        "  IF(MAX(d.case_start) >= r.recent_from, 'tritt weiterhin auf', 'in den letzten 4 Wochen nicht mehr') AS status\n",
+        "FROM dev d CROSS JOIN ref r\n",
+        "GROUP BY d.deviation_type, d.src, d.tgt, r.recent_from, r.all_cases, r.recent_cases\n",
+        "ORDER BY cases DESC\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "konformitaet",
+      "displayName": "Konformität",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_region",
+            "queries": [
+              {
+                "name": "f_cases",
+                "query": {
+                  "datasetName": "conformance_cases",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_dev",
+                "query": {
+                  "datasetName": "deviations",
+                  "fields": [
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "f_cases"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region",
+                    "queryName": "f_dev"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Region"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_cases",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "conformance_cases",
+                  "fields": [
+                    {
+                      "name": "count(case_id)",
+                      "expression": "COUNT(`case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "count(case_id)",
+                  "displayName": "Fälle"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fälle"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "conformance_cases",
+                  "fields": [
+                    {
+                      "name": "rate",
+                      "expression": "ROUND(AVG(`is_conformant`) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "rate",
+                  "displayName": "Konformitätsrate (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Konformitätsrate (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_dev",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "conformance_cases",
+                  "fields": [
+                    {
+                      "name": "dev_cases",
+                      "expression": "SUM(1 - `is_conformant`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "dev_cases",
+                  "displayName": "Fälle mit Abweichung"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fälle mit Abweichung"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_paths",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "deviation_summary",
+                  "fields": [
+                    {
+                      "name": "count(transition)",
+                      "expression": "COUNT(`transition`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "count(transition)",
+                  "displayName": "Unzulässige Wege"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Unzulässige Wege"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_active",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "deviation_summary",
+                  "fields": [
+                    {
+                      "name": "active",
+                      "expression": "COUNT_IF(`status` = 'tritt weiterhin auf')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "active",
+                  "displayName": "davon weiterhin möglich"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "davon weiterhin möglich"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_days",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "conformance_cases",
+                  "fields": [
+                    {
+                      "name": "days_dev",
+                      "expression": "ROUND(AVG(IF(`is_conformant` = 0, `throughput_days`, NULL)), 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "days_dev",
+                  "displayName": "Ø Durchlaufzeit mit Abweichung (Tage)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ø Durchlaufzeit mit Abweichung (Tage)"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "text_process_graph_hint",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### Soll-Ist-Prozessgraph\n",
+                "Hier die Custom Visualization einfügen: Dataset aus `03_process_graph_dataset.sql`, Typ *Custom Viz*, Spezifikation aus `process_graph.vl.json` (siehe README).\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 14
+          }
+        },
+        {
+          "widget": {
+            "name": "line_conformance_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "conformance_cases",
+                  "fields": [
+                    {
+                      "name": "weekly(case_start)",
+                      "expression": "DATE_TRUNC(\"WEEK\", `case_start`)"
+                    },
+                    {
+                      "name": "rate",
+                      "expression": "AVG(`is_conformant`) * 100"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "weekly(case_start)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Startwoche"
+                },
+                "y": {
+                  "fieldName": "rate",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Konformitätsrate (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Konformitätsrate je Startwoche"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_deviation_types",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "deviations",
+                  "fields": [
+                    {
+                      "name": "deviation_type",
+                      "expression": "`deviation_type`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "COUNT(DISTINCT `case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "cases",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Fälle"
+                },
+                "y": {
+                  "fieldName": "deviation_type",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "Abweichungstyp"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fälle je Abweichungstyp"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 12,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "table_deviation_summary",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "deviation_summary",
+                  "fields": [
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "deviation_type",
+                      "expression": "`deviation_type`"
+                    },
+                    {
+                      "name": "transition",
+                      "expression": "`transition`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "`cases`"
+                    },
+                    {
+                      "name": "pct_of_cases",
+                      "expression": "`pct_of_cases`"
+                    },
+                    {
+                      "name": "pct_last_4w",
+                      "expression": "`pct_last_4w`"
+                    },
+                    {
+                      "name": "first_seen",
+                      "expression": "`first_seen`"
+                    },
+                    {
+                      "name": "last_seen",
+                      "expression": "`last_seen`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status"
+                  },
+                  {
+                    "fieldName": "deviation_type",
+                    "displayName": "Abweichungstyp"
+                  },
+                  {
+                    "fieldName": "transition",
+                    "displayName": "Übergang"
+                  },
+                  {
+                    "fieldName": "cases",
+                    "displayName": "Fälle"
+                  },
+                  {
+                    "fieldName": "pct_of_cases",
+                    "displayName": "Anteil gesamt (%)"
+                  },
+                  {
+                    "fieldName": "pct_last_4w",
+                    "displayName": "Anteil letzte 4 Wochen (%)"
+                  },
+                  {
+                    "fieldName": "first_seen",
+                    "displayName": "Erstmals"
+                  },
+                  {
+                    "fieldName": "last_seen",
+                    "displayName": "Zuletzt"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Unzulässige Übergänge – lässt die Applikation das noch zu?"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 6,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "table_deviating_cases",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "conformance_cases",
+                  "fields": [
+                    {
+                      "name": "case_id",
+                      "expression": "`case_id`"
+                    },
+                    {
+                      "name": "region",
+                      "expression": "`region`"
+                    },
+                    {
+                      "name": "case_start",
+                      "expression": "`case_start`"
+                    },
+                    {
+                      "name": "throughput_days",
+                      "expression": "`throughput_days`"
+                    },
+                    {
+                      "name": "deviations",
+                      "expression": "`deviations`"
+                    },
+                    {
+                      "name": "is_conformant",
+                      "expression": "`is_conformant`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "case_id",
+                    "displayName": "Fall"
+                  },
+                  {
+                    "fieldName": "region",
+                    "displayName": "Region"
+                  },
+                  {
+                    "fieldName": "case_start",
+                    "displayName": "Start"
+                  },
+                  {
+                    "fieldName": "throughput_days",
+                    "displayName": "Durchlaufzeit (Tage)"
+                  },
+                  {
+                    "fieldName": "deviations",
+                    "displayName": "Unzulässige Übergänge"
+                  },
+                  {
+                    "fieldName": "is_conformant",
+                    "displayName": "Konform (1/0)"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fälle (nach „Konform = 0“ filtern)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 26,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    }
+  ]
+}
