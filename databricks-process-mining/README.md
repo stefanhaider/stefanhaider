@@ -57,6 +57,7 @@ Den Abweichungstyp leitet SQL aus der Reihenfolge ab:
 | `process_graph.vl.json` | Vega-Lite-Spezifikation des Prozessgraphen zum Einfügen in *Custom Viz* |
 | `process_mining.lvdash.json` | Importierbarer Dashboard-Entwurf (alles außer dem Prozessgraphen, dafür ein Platzhalter) |
 | `dashboard.html` | Interaktive Vorschau mit Tooltips und Hell/Dunkel. Der Graph wird mit der echten Vega-Lite-Bibliothek gerendert (darum ca. 800 KB) |
+| `IMPLEMENTATION_SPEC.md` | Vollständige Übergabe zur Implementierung an einen anderen Agenten oder ein Team |
 | `alternative_sankey/` | Früherer Entwurf: Prozessfluss als Sankey über alle Varianten |
 
 ## Soll-Ist-Prozessgraph (Custom Visualization)
