@@ -1,172 +1,108 @@
 {
   "datasets": [
     {
-      "name": "conformance_cases",
-      "displayName": "Konformität je Fall",
+      "name": "case_conformance",
+      "displayName": "Vorgänge (Konformität)",
       "queryLines": [
-        "WITH seq AS (\n",
-        "  SELECT\n",
-        "    case_id, region, activity, event_ts,\n",
-        "    LAG(activity)  OVER w AS prev_activity,\n",
-        "    LEAD(activity) OVER w AS next_activity\n",
-        "  FROM main.process_mining.event_log\n",
-        "  WINDOW w AS (PARTITION BY case_id ORDER BY event_ts, step_no)\n",
-        "),\n",
-        "trans AS (\n",
-        "  SELECT case_id, region, activity AS src, COALESCE(next_activity, '■ Ende') AS tgt, event_ts FROM seq\n",
-        "  UNION ALL\n",
-        "  SELECT case_id, region, '▶ Start', activity, event_ts FROM seq WHERE prev_activity IS NULL\n",
-        "),\n",
-        "checked AS (\n",
-        "  SELECT t.*, m.src IS NOT NULL AS is_allowed\n",
-        "  FROM trans t\n",
-        "  LEFT JOIN main.process_mining.process_model_transitions m ON m.src = t.src AND m.tgt = t.tgt\n",
-        ")\n",
         "SELECT\n",
-        "  case_id,\n",
-        "  region,\n",
-        "  MIN(event_ts)                                                   AS case_start,\n",
-        "  timestampdiff(HOUR, MIN(event_ts), MAX(event_ts)) / 24.0        AS throughput_days,\n",
-        "  CAST(BOOL_AND(is_allowed) AS INT)                               AS is_conformant,\n",
-        "  COUNT_IF(NOT is_allowed)                                        AS n_deviating_transitions,\n",
-        "  array_join(array_sort(collect_set(IF(NOT is_allowed, concat(src, ' → ', tgt), NULL))), ' | ') AS deviations\n",
-        "FROM checked\n",
-        "GROUP BY case_id, region\n"
+        "  c.*,\n",
+        "  pc.owner AS process_owner\n",
+        "FROM main.data_manager_pm.v_case_conformance c\n",
+        "JOIN main.data_manager_pm.process_catalog pc USING (process)\n"
       ]
     },
     {
-      "name": "deviations",
-      "displayName": "Unzulässige Übergänge (Vorkommen)",
+      "name": "findings",
+      "displayName": "Befunde (Vorkommen)",
       "queryLines": [
-        "WITH seq AS (\n",
-        "  SELECT\n",
-        "    case_id, region, activity, event_ts,\n",
-        "    LAG(activity)  OVER w AS prev_activity,\n",
-        "    LEAD(activity) OVER w AS next_activity,\n",
-        "    LEAD(event_ts) OVER w AS next_ts\n",
-        "  FROM main.process_mining.event_log\n",
-        "  WINDOW w AS (PARTITION BY case_id ORDER BY event_ts, step_no)\n",
-        "),\n",
-        "trans AS (\n",
-        "  SELECT case_id, region, activity AS src, COALESCE(next_activity, '■ Ende') AS tgt,\n",
-        "         COALESCE(next_ts, event_ts) AS event_ts FROM seq\n",
-        "  UNION ALL\n",
-        "  SELECT case_id, region, '▶ Start', activity, event_ts FROM seq WHERE prev_activity IS NULL\n",
-        ")\n",
         "SELECT\n",
-        "  t.case_id,\n",
-        "  t.region,\n",
-        "  t.src,\n",
-        "  t.tgt,\n",
-        "  concat(t.src, ' → ', t.tgt) AS transition,\n",
-        "  t.event_ts,\n",
-        "  CASE\n",
-        "    WHEN ms.activity IS NULL OR mt.activity IS NULL THEN 'Zusätzliche Aktivität'\n",
-        "    WHEN t.tgt = '■ Ende'                           THEN 'Kein gültiger Abschluss'\n",
-        "    WHEN mt.is_terminal                             THEN 'Abbruch an unzulässiger Stelle'\n",
-        "    WHEN mt.step_order <= ms.step_order             THEN 'Rücksprung / Wiederholung'\n",
-        "    WHEN mt.step_order >  ms.step_order + 1         THEN 'Schritt übersprungen'\n",
-        "    ELSE 'Unzulässiger Übergang'\n",
-        "  END AS deviation_type\n",
-        "FROM trans t\n",
-        "LEFT JOIN main.process_mining.process_model_transitions m  ON m.src = t.src AND m.tgt = t.tgt\n",
-        "LEFT JOIN main.process_mining.process_model_activities  ms ON ms.activity = t.src\n",
-        "LEFT JOIN main.process_mining.process_model_activities  mt ON mt.activity = t.tgt\n",
-        "WHERE m.src IS NULL\n"
+        "  f.*,\n",
+        "  pc.owner AS process_owner\n",
+        "FROM main.data_manager_pm.v_findings f\n",
+        "JOIN main.data_manager_pm.process_catalog pc USING (process)\n"
       ]
     },
     {
-      "name": "deviation_summary",
-      "displayName": "Unzulässige Übergänge (Zusammenfassung)",
+      "name": "findings_summary",
+      "displayName": "Befunde (Zusammenfassung)",
       "queryLines": [
-        "WITH ev AS (\n",
-        "  SELECT * FROM main.process_mining.event_log\n",
-        "),\n",
-        "starts AS (\n",
-        "  SELECT case_id, MIN(event_ts) AS case_start FROM ev GROUP BY case_id\n",
-        "),\n",
-        "seq AS (\n",
-        "  SELECT case_id, activity, event_ts,\n",
-        "         LAG(activity)  OVER w AS prev_activity,\n",
-        "         LEAD(activity) OVER w AS next_activity,\n",
-        "         LEAD(event_ts) OVER w AS next_ts\n",
-        "  FROM ev\n",
-        "  WINDOW w AS (PARTITION BY case_id ORDER BY event_ts, step_no)\n",
-        "),\n",
-        "trans AS (\n",
-        "  SELECT case_id, activity AS src, COALESCE(next_activity, '■ Ende') AS tgt, COALESCE(next_ts, event_ts) AS event_ts FROM seq\n",
-        "  UNION ALL\n",
-        "  SELECT case_id, '▶ Start', activity, event_ts FROM seq WHERE prev_activity IS NULL\n",
-        "),\n",
-        "dev AS (\n",
-        "  SELECT t.*, st.case_start,\n",
-        "    CASE\n",
-        "      WHEN ms.activity IS NULL OR mt.activity IS NULL THEN 'Zusätzliche Aktivität'\n",
-        "      WHEN t.tgt = '■ Ende'                           THEN 'Kein gültiger Abschluss'\n",
-        "      WHEN mt.is_terminal                             THEN 'Abbruch an unzulässiger Stelle'\n",
-        "      WHEN mt.step_order <= ms.step_order             THEN 'Rücksprung / Wiederholung'\n",
-        "      WHEN mt.step_order >  ms.step_order + 1         THEN 'Schritt übersprungen'\n",
-        "      ELSE 'Unzulässiger Übergang'\n",
-        "    END AS deviation_type\n",
-        "  FROM trans t\n",
-        "  LEFT JOIN main.process_mining.process_model_transitions m  ON m.src = t.src AND m.tgt = t.tgt\n",
-        "  LEFT JOIN main.process_mining.process_model_activities  ms ON ms.activity = t.src\n",
-        "  LEFT JOIN main.process_mining.process_model_activities  mt ON mt.activity = t.tgt\n",
-        "  JOIN starts st ON st.case_id = t.case_id\n",
-        "  WHERE m.src IS NULL\n",
-        "    AND NOT (ms.activity IS NULL AND mt.activity IS NOT NULL)   -- Weg aus Zusatz-Aktivität zurück: nicht doppelt zählen\n",
+        "WITH cases AS (\n",
+        "  SELECT process, case_id, case_start\n",
+        "  FROM main.data_manager_pm.v_case_conformance\n",
         "),\n",
         "ref AS (\n",
-        "  SELECT recent_from, COUNT(*) AS all_cases, COUNT_IF(case_start >= recent_from) AS recent_cases\n",
-        "  FROM starts CROSS JOIN (SELECT MAX(case_start) - INTERVAL 28 DAYS AS recent_from FROM starts)\n",
-        "  GROUP BY recent_from\n",
+        "  SELECT c.process, w.recent_from, w.new_from,\n",
+        "         COUNT(*) AS all_cases,\n",
+        "         COUNT_IF(c.case_start >= w.recent_from) AS recent_cases\n",
+        "  FROM cases c\n",
+        "  JOIN (SELECT process,\n",
+        "               MAX(case_start) - INTERVAL 28 DAYS AS recent_from,\n",
+        "               MAX(case_start) - INTERVAL 56 DAYS AS new_from\n",
+        "        FROM cases GROUP BY process) w USING (process)\n",
+        "  GROUP BY c.process, w.recent_from, w.new_from\n",
+        "),\n",
+        "f AS (\n",
+        "  SELECT f.*, c.case_start\n",
+        "  FROM main.data_manager_pm.v_findings f\n",
+        "  JOIN cases c USING (process, case_id)\n",
         ")\n",
         "SELECT\n",
-        "  d.deviation_type,\n",
-        "  concat(d.src, ' → ', d.tgt)                                    AS transition,\n",
-        "  COUNT(DISTINCT d.case_id)                                      AS cases,\n",
-        "  ROUND(COUNT(DISTINCT d.case_id) * 100.0 / r.all_cases, 1)      AS pct_of_cases,\n",
-        "  CAST(MIN(d.event_ts) AS DATE)                                  AS first_seen,\n",
-        "  CAST(MAX(d.event_ts) AS DATE)                                  AS last_seen,\n",
-        "  COUNT(DISTINCT IF(d.case_start >= r.recent_from, d.case_id, NULL))                       AS cases_last_4w,\n",
-        "  ROUND(COUNT(DISTINCT IF(d.case_start >= r.recent_from, d.case_id, NULL)) * 100.0 / r.recent_cases, 1) AS pct_last_4w,\n",
-        "  IF(MAX(d.case_start) >= r.recent_from, 'tritt weiterhin auf', 'in den letzten 4 Wochen nicht mehr') AS status\n",
-        "FROM dev d CROSS JOIN ref r\n",
-        "GROUP BY d.deviation_type, d.src, d.tgt, r.recent_from, r.all_cases, r.recent_cases\n",
-        "ORDER BY cases DESC\n"
+        "  f.process,\n",
+        "  f.finding_type,\n",
+        "  f.finding,\n",
+        "  f.severity,\n",
+        "  f.severity_rank,\n",
+        "  COUNT(DISTINCT f.case_id)                                                     AS cases,\n",
+        "  ROUND(COUNT(DISTINCT f.case_id) * 100.0 / r.all_cases, 1)                     AS pct_of_cases,\n",
+        "  COUNT(DISTINCT IF(f.case_start >= r.recent_from, f.case_id, NULL))            AS cases_last_4w,\n",
+        "  ROUND(COUNT(DISTINCT IF(f.case_start >= r.recent_from, f.case_id, NULL)) * 100.0 / r.recent_cases, 1) AS pct_last_4w,\n",
+        "  CAST(MIN(f.event_ts) AS DATE)                                                 AS first_seen,\n",
+        "  CAST(MAX(f.event_ts) AS DATE)                                                 AS last_seen,\n",
+        "  CASE\n",
+        "    WHEN MIN(f.case_start) >= r.new_from    THEN 'neu'\n",
+        "    WHEN MAX(f.case_start) >= r.recent_from THEN 'tritt weiterhin auf'\n",
+        "    ELSE 'nicht mehr aufgetreten'\n",
+        "  END                                                                           AS status,\n",
+        "  MAX(f.recommended_action)                                                     AS recommended_action,\n",
+        "  MAX(pc.owner)                                                                 AS process_owner\n",
+        "FROM f\n",
+        "JOIN ref r USING (process)\n",
+        "JOIN main.data_manager_pm.process_catalog pc USING (process)\n",
+        "GROUP BY f.process, f.finding_type, f.finding, f.severity, f.severity_rank, r.recent_from, r.new_from, r.all_cases, r.recent_cases\n",
+        "ORDER BY f.severity_rank, cases_last_4w DESC, cases DESC\n"
       ]
     }
   ],
   "pages": [
     {
-      "name": "konformitaet",
-      "displayName": "Konformität",
+      "name": "uebersicht",
+      "displayName": "Übersicht",
       "layout": [
         {
           "widget": {
-            "name": "filter_region",
+            "name": "filter_domain",
             "queries": [
               {
-                "name": "f_cases",
+                "name": "f_case_conformance",
                 "query": {
-                  "datasetName": "conformance_cases",
+                  "datasetName": "case_conformance",
                   "fields": [
                     {
-                      "name": "region",
-                      "expression": "`region`"
+                      "name": "domain",
+                      "expression": "`domain`"
                     }
                   ],
                   "disaggregated": false
                 }
               },
               {
-                "name": "f_dev",
+                "name": "f_findings",
                 "query": {
-                  "datasetName": "deviations",
+                  "datasetName": "findings",
                   "fields": [
                     {
-                      "name": "region",
-                      "expression": "`region`"
+                      "name": "domain",
+                      "expression": "`domain`"
                     }
                   ],
                   "disaggregated": false
@@ -179,20 +115,20 @@
               "encodings": {
                 "fields": [
                   {
-                    "fieldName": "region",
-                    "displayName": "Region",
-                    "queryName": "f_cases"
+                    "fieldName": "domain",
+                    "displayName": "Datendomäne",
+                    "queryName": "f_case_conformance"
                   },
                   {
-                    "fieldName": "region",
-                    "displayName": "Region",
-                    "queryName": "f_dev"
+                    "fieldName": "domain",
+                    "displayName": "Datendomäne",
+                    "queryName": "f_findings"
                   }
                 ]
               },
               "frame": {
                 "showTitle": true,
-                "title": "Region"
+                "title": "Datendomäne"
               }
             }
           },
@@ -205,15 +141,15 @@
         },
         {
           "widget": {
-            "name": "kpi_cases",
+            "name": "o_cases",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "conformance_cases",
+                  "datasetName": "case_conformance",
                   "fields": [
                     {
-                      "name": "count(case_id)",
+                      "name": "n",
                       "expression": "COUNT(`case_id`)"
                     }
                   ],
@@ -226,13 +162,13 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "count(case_id)",
-                  "displayName": "Fälle"
+                  "fieldName": "n",
+                  "displayName": "Vorgänge"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Fälle"
+                "title": "Vorgänge"
               }
             }
           },
@@ -245,12 +181,12 @@
         },
         {
           "widget": {
-            "name": "kpi_rate",
+            "name": "o_rate",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "conformance_cases",
+                  "datasetName": "case_conformance",
                   "fields": [
                     {
                       "name": "rate",
@@ -267,12 +203,12 @@
               "encodings": {
                 "value": {
                   "fieldName": "rate",
-                  "displayName": "Konformitätsrate (%)"
+                  "displayName": "Prozesskonformität (%)"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Konformitätsrate (%)"
+                "title": "Prozesskonformität (%)"
               }
             }
           },
@@ -285,16 +221,16 @@
         },
         {
           "widget": {
-            "name": "kpi_dev",
+            "name": "o_comp",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "conformance_cases",
+                  "datasetName": "case_conformance",
                   "fields": [
                     {
-                      "name": "dev_cases",
-                      "expression": "SUM(1 - `is_conformant`)"
+                      "name": "comp",
+                      "expression": "ROUND(AVG(`is_compliant`) * 100, 1)"
                     }
                   ],
                   "disaggregated": false
@@ -306,13 +242,13 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "dev_cases",
-                  "displayName": "Fälle mit Abweichung"
+                  "fieldName": "comp",
+                  "displayName": "Governance-konform (%)"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Fälle mit Abweichung"
+                "title": "Governance-konform (%)"
               }
             }
           },
@@ -325,16 +261,16 @@
         },
         {
           "widget": {
-            "name": "kpi_paths",
+            "name": "o_crit",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "deviation_summary",
+                  "datasetName": "case_conformance",
                   "fields": [
                     {
-                      "name": "count(transition)",
-                      "expression": "COUNT(`transition`)"
+                      "name": "crit",
+                      "expression": "SUM(`has_critical`)"
                     }
                   ],
                   "disaggregated": false
@@ -346,13 +282,13 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "count(transition)",
-                  "displayName": "Unzulässige Wege"
+                  "fieldName": "crit",
+                  "displayName": "Vorgänge mit kritischem Befund"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Unzulässige Wege"
+                "title": "Vorgänge mit kritischem Befund"
               }
             }
           },
@@ -365,16 +301,16 @@
         },
         {
           "widget": {
-            "name": "kpi_active",
+            "name": "o_active",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "deviation_summary",
+                  "datasetName": "findings_summary",
                   "fields": [
                     {
                       "name": "active",
-                      "expression": "COUNT_IF(`status` = 'tritt weiterhin auf')"
+                      "expression": "COUNT_IF(`severity` = 'kritisch' AND `status` <> 'nicht mehr aufgetreten')"
                     }
                   ],
                   "disaggregated": false
@@ -387,12 +323,12 @@
               "encodings": {
                 "value": {
                   "fieldName": "active",
-                  "displayName": "davon weiterhin möglich"
+                  "displayName": "Aktive kritische Befunde"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "davon weiterhin möglich"
+                "title": "Aktive kritische Befunde"
               }
             }
           },
@@ -405,16 +341,16 @@
         },
         {
           "widget": {
-            "name": "kpi_days",
+            "name": "o_new",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "conformance_cases",
+                  "datasetName": "findings_summary",
                   "fields": [
                     {
-                      "name": "days_dev",
-                      "expression": "ROUND(AVG(IF(`is_conformant` = 0, `throughput_days`, NULL)), 1)"
+                      "name": "new",
+                      "expression": "COUNT_IF(`status` = 'neu')"
                     }
                   ],
                   "disaggregated": false
@@ -426,13 +362,13 @@
               "widgetType": "counter",
               "encodings": {
                 "value": {
-                  "fieldName": "days_dev",
-                  "displayName": "Ø Durchlaufzeit mit Abweichung (Tage)"
+                  "fieldName": "new",
+                  "displayName": "Neue Befunde (8 Wochen)"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Ø Durchlaufzeit mit Abweichung (Tage)"
+                "title": "Neue Befunde (8 Wochen)"
               }
             }
           },
@@ -445,11 +381,750 @@
         },
         {
           "widget": {
-            "name": "text_process_graph_hint",
+            "name": "o_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "monthly(case_start)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `case_start`)"
+                    },
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "rate",
+                      "expression": "AVG(`is_conformant`) * 100"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "monthly(case_start)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Startmonat"
+                },
+                "y": {
+                  "fieldName": "rate",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Prozesskonformität (%)"
+                },
+                "color": {
+                  "fieldName": "process",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Prozess"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozesskonformität je Startmonat"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "o_types",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "COUNT(DISTINCT `case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "cases",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Vorgänge"
+                },
+                "y": {
+                  "fieldName": "finding_type",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Befund-Typ"
+                },
+                "color": {
+                  "fieldName": "process",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Prozess"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Betroffene Vorgänge je Prozess und Befund-Typ"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "o_actions",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "finding",
+                      "expression": "`finding`"
+                    },
+                    {
+                      "name": "cases_last_4w",
+                      "expression": "`cases_last_4w`"
+                    },
+                    {
+                      "name": "pct_last_4w",
+                      "expression": "`pct_last_4w`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "`cases`"
+                    },
+                    {
+                      "name": "first_seen",
+                      "expression": "`first_seen`"
+                    },
+                    {
+                      "name": "last_seen",
+                      "expression": "`last_seen`"
+                    },
+                    {
+                      "name": "process_owner",
+                      "expression": "`process_owner`"
+                    },
+                    {
+                      "name": "recommended_action",
+                      "expression": "`recommended_action`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "severity",
+                    "displayName": "Schwere"
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "finding_type",
+                    "displayName": "Befund-Typ"
+                  },
+                  {
+                    "fieldName": "finding",
+                    "displayName": "Befund"
+                  },
+                  {
+                    "fieldName": "cases_last_4w",
+                    "displayName": "Letzte 4 Wochen"
+                  },
+                  {
+                    "fieldName": "pct_last_4w",
+                    "displayName": "Anteil letzte 4 Wochen (%)"
+                  },
+                  {
+                    "fieldName": "cases",
+                    "displayName": "Gesamt"
+                  },
+                  {
+                    "fieldName": "first_seen",
+                    "displayName": "Erstmals"
+                  },
+                  {
+                    "fieldName": "last_seen",
+                    "displayName": "Zuletzt"
+                  },
+                  {
+                    "fieldName": "process_owner",
+                    "displayName": "Verantwortlich"
+                  },
+                  {
+                    "fieldName": "recommended_action",
+                    "displayName": "Empfohlene Maßnahme"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Handlungsbedarf – aktive Governance-Befunde (Filter: Status ≠ „nicht mehr aufgetreten“)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 6,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "o_cases_t",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "case_id",
+                      "expression": "`case_id`"
+                    },
+                    {
+                      "name": "domain",
+                      "expression": "`domain`"
+                    },
+                    {
+                      "name": "initiator",
+                      "expression": "`initiator`"
+                    },
+                    {
+                      "name": "case_start",
+                      "expression": "`case_start`"
+                    },
+                    {
+                      "name": "findings",
+                      "expression": "`findings`"
+                    },
+                    {
+                      "name": "has_critical",
+                      "expression": "`has_critical`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "case_id",
+                    "displayName": "Vorgang"
+                  },
+                  {
+                    "fieldName": "domain",
+                    "displayName": "Domäne"
+                  },
+                  {
+                    "fieldName": "initiator",
+                    "displayName": "Gestartet von"
+                  },
+                  {
+                    "fieldName": "case_start",
+                    "displayName": "Start"
+                  },
+                  {
+                    "fieldName": "findings",
+                    "displayName": "Befunde"
+                  },
+                  {
+                    "fieldName": "has_critical",
+                    "displayName": "Kritisch (1/0)"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge mit kritischem Befund (Filter: has_critical = 1)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 21,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "prozessdetail",
+      "displayName": "Prozessdetail",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_process",
+            "queries": [
+              {
+                "name": "f_case_conformance",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_findings",
+                "query": {
+                  "datasetName": "findings",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_findings_summary",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_case_conformance"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_findings"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_findings_summary"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozess"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_domain_d",
+            "queries": [
+              {
+                "name": "f_case_conformance",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "domain",
+                      "expression": "`domain`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_findings",
+                "query": {
+                  "datasetName": "findings",
+                  "fields": [
+                    {
+                      "name": "domain",
+                      "expression": "`domain`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "domain",
+                    "displayName": "Datendomäne",
+                    "queryName": "f_case_conformance"
+                  },
+                  {
+                    "fieldName": "domain",
+                    "displayName": "Datendomäne",
+                    "queryName": "f_findings"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Datendomäne"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "d_cases",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "n",
+                      "expression": "COUNT(`case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "n",
+                  "displayName": "Vorgänge"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "rate",
+                      "expression": "ROUND(AVG(`is_conformant`) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "rate",
+                  "displayName": "Prozesskonformität (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozesskonformität (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_bypass",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "bypass",
+                      "expression": "SUM(`has_control_bypass`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "bypass",
+                  "displayName": "Kontrolle umgangen"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Kontrolle umgangen"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_sod",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "sod",
+                      "expression": "SUM(`has_sod_violation`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sod",
+                  "displayName": "Funktionstrennung verletzt"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Funktionstrennung verletzt"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_sla",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "sla",
+                      "expression": "SUM(`has_sla_breach`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sla",
+                  "displayName": "Frist überschritten"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Frist überschritten"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_days",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "days",
+                      "expression": "ROUND(AVG(`throughput_days`), 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "days",
+                  "displayName": "Ø Durchlaufzeit (Tage)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ø Durchlaufzeit (Tage)"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_graph_hint",
             "multilineTextboxSpec": {
               "lines": [
                 "### Soll-Ist-Prozessgraph\n",
-                "Hier die Custom Visualization einfügen: Dataset aus `03_process_graph_dataset.sql`, Typ *Custom Viz*, Spezifikation aus `process_graph.vl.json` (siehe README).\n"
+                "Custom Viz einfügen: Dataset aus `04_ds_process_graph.sql` (Parameter `:process` an den Prozess-Filter binden), Spezifikation aus `process_graph.vl.json`. Siehe README.\n"
               ]
             }
           },
@@ -462,12 +1137,12 @@
         },
         {
           "widget": {
-            "name": "line_conformance_trend",
+            "name": "d_trend",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "conformance_cases",
+                  "datasetName": "case_conformance",
                   "fields": [
                     {
                       "name": "weekly(case_start)",
@@ -498,12 +1173,12 @@
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "Konformitätsrate (%)"
+                  "displayName": "Prozesskonformität (%)"
                 }
               },
               "frame": {
                 "showTitle": true,
-                "title": "Konformitätsrate je Startwoche"
+                "title": "Prozesskonformität je Startwoche"
               }
             }
           },
@@ -516,16 +1191,16 @@
         },
         {
           "widget": {
-            "name": "bar_deviation_types",
+            "name": "d_types",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "deviations",
+                  "datasetName": "findings",
                   "fields": [
                     {
-                      "name": "deviation_type",
-                      "expression": "`deviation_type`"
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
                     },
                     {
                       "name": "cases",
@@ -545,17 +1220,17 @@
                   "scale": {
                     "type": "quantitative"
                   },
-                  "displayName": "Fälle"
+                  "displayName": "Vorgänge"
                 },
                 "y": {
-                  "fieldName": "deviation_type",
+                  "fieldName": "finding_type",
                   "scale": {
                     "type": "categorical",
                     "sort": {
                       "by": "x-reversed"
                     }
                   },
-                  "displayName": "Abweichungstyp"
+                  "displayName": "Befund-Typ"
                 },
                 "label": {
                   "show": true
@@ -563,7 +1238,7 @@
               },
               "frame": {
                 "showTitle": true,
-                "title": "Fälle je Abweichungstyp"
+                "title": "Betroffene Vorgänge je Befund-Typ"
               }
             }
           },
@@ -576,36 +1251,44 @@
         },
         {
           "widget": {
-            "name": "table_deviation_summary",
+            "name": "d_findings",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "deviation_summary",
+                  "datasetName": "findings_summary",
                   "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
                     {
                       "name": "status",
                       "expression": "`status`"
                     },
                     {
-                      "name": "deviation_type",
-                      "expression": "`deviation_type`"
+                      "name": "process",
+                      "expression": "`process`"
                     },
                     {
-                      "name": "transition",
-                      "expression": "`transition`"
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
                     },
                     {
-                      "name": "cases",
-                      "expression": "`cases`"
+                      "name": "finding",
+                      "expression": "`finding`"
                     },
                     {
-                      "name": "pct_of_cases",
-                      "expression": "`pct_of_cases`"
+                      "name": "cases_last_4w",
+                      "expression": "`cases_last_4w`"
                     },
                     {
                       "name": "pct_last_4w",
                       "expression": "`pct_last_4w`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "`cases`"
                     },
                     {
                       "name": "first_seen",
@@ -614,6 +1297,14 @@
                     {
                       "name": "last_seen",
                       "expression": "`last_seen`"
+                    },
+                    {
+                      "name": "process_owner",
+                      "expression": "`process_owner`"
+                    },
+                    {
+                      "name": "recommended_action",
+                      "expression": "`recommended_action`"
                     }
                   ],
                   "disaggregated": true
@@ -626,28 +1317,36 @@
               "encodings": {
                 "columns": [
                   {
+                    "fieldName": "severity",
+                    "displayName": "Schwere"
+                  },
+                  {
                     "fieldName": "status",
                     "displayName": "Status"
                   },
                   {
-                    "fieldName": "deviation_type",
-                    "displayName": "Abweichungstyp"
+                    "fieldName": "process",
+                    "displayName": "Prozess"
                   },
                   {
-                    "fieldName": "transition",
-                    "displayName": "Übergang"
+                    "fieldName": "finding_type",
+                    "displayName": "Befund-Typ"
                   },
                   {
-                    "fieldName": "cases",
-                    "displayName": "Fälle"
+                    "fieldName": "finding",
+                    "displayName": "Befund"
                   },
                   {
-                    "fieldName": "pct_of_cases",
-                    "displayName": "Anteil gesamt (%)"
+                    "fieldName": "cases_last_4w",
+                    "displayName": "Letzte 4 Wochen"
                   },
                   {
                     "fieldName": "pct_last_4w",
                     "displayName": "Anteil letzte 4 Wochen (%)"
+                  },
+                  {
+                    "fieldName": "cases",
+                    "displayName": "Gesamt"
                   },
                   {
                     "fieldName": "first_seen",
@@ -656,12 +1355,20 @@
                   {
                     "fieldName": "last_seen",
                     "displayName": "Zuletzt"
+                  },
+                  {
+                    "fieldName": "process_owner",
+                    "displayName": "Verantwortlich"
+                  },
+                  {
+                    "fieldName": "recommended_action",
+                    "displayName": "Empfohlene Maßnahme"
                   }
                 ]
               },
               "frame": {
                 "showTitle": true,
-                "title": "Unzulässige Übergänge – lässt die Applikation das noch zu?"
+                "title": "Befunde – lässt die Applikation das noch zu?"
               }
             }
           },
@@ -669,25 +1376,29 @@
             "x": 0,
             "y": 19,
             "width": 6,
-            "height": 7
+            "height": 8
           }
         },
         {
           "widget": {
-            "name": "table_deviating_cases",
+            "name": "d_cases_t",
             "queries": [
               {
                 "name": "main_query",
                 "query": {
-                  "datasetName": "conformance_cases",
+                  "datasetName": "case_conformance",
                   "fields": [
                     {
                       "name": "case_id",
                       "expression": "`case_id`"
                     },
                     {
-                      "name": "region",
-                      "expression": "`region`"
+                      "name": "domain",
+                      "expression": "`domain`"
+                    },
+                    {
+                      "name": "initiator",
+                      "expression": "`initiator`"
                     },
                     {
                       "name": "case_start",
@@ -698,12 +1409,8 @@
                       "expression": "`throughput_days`"
                     },
                     {
-                      "name": "deviations",
-                      "expression": "`deviations`"
-                    },
-                    {
-                      "name": "is_conformant",
-                      "expression": "`is_conformant`"
+                      "name": "findings",
+                      "expression": "`findings`"
                     }
                   ],
                   "disaggregated": true
@@ -717,11 +1424,15 @@
                 "columns": [
                   {
                     "fieldName": "case_id",
-                    "displayName": "Fall"
+                    "displayName": "Vorgang"
                   },
                   {
-                    "fieldName": "region",
-                    "displayName": "Region"
+                    "fieldName": "domain",
+                    "displayName": "Domäne"
+                  },
+                  {
+                    "fieldName": "initiator",
+                    "displayName": "Gestartet von"
                   },
                   {
                     "fieldName": "case_start",
@@ -732,24 +1443,20 @@
                     "displayName": "Durchlaufzeit (Tage)"
                   },
                   {
-                    "fieldName": "deviations",
-                    "displayName": "Unzulässige Übergänge"
-                  },
-                  {
-                    "fieldName": "is_conformant",
-                    "displayName": "Konform (1/0)"
+                    "fieldName": "findings",
+                    "displayName": "Befunde"
                   }
                 ]
               },
               "frame": {
                 "showTitle": true,
-                "title": "Fälle (nach „Konform = 0“ filtern)"
+                "title": "Betroffene Vorgänge (Filter: findings ≠ '')"
               }
             }
           },
           "position": {
             "x": 0,
-            "y": 26,
+            "y": 27,
             "width": 6,
             "height": 8
           }

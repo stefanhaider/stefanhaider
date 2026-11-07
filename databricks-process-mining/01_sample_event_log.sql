@@ -1,59 +1,101 @@
 -- =====================================================================
--- Process Mining Mockup – Beispiel-Eventlog (Order-to-Cash)
--- Erzeugt eine deterministische Tabelle mit 1.000 Fällen / 8 Varianten.
--- Katalog/Schema bei Bedarf anpassen.
+-- Data Manager – synthetisches Eventlog (nur für Demo und Tests)
+--
+-- Drei Prozesse des Data Managers mit typischen Governance-Lücken:
+--   Access Request (500 Vorgänge), Data Contract (300), Data Product (200)
+--
+-- Eingebaute Effekte (zum Prüfen der Datasets und des Dashboards):
+--   AR: ab KW 14 (30.03.2026) Berechtigungen OHNE Security-Prüfung   -> Kontrolle umgangen, aktiv
+--   AR: Berechtigungen direkt ohne Antrag (Admin-Backend)            -> Kontrolle umgangen, aktiv
+--   AR: Antrag geht zur Überarbeitung zurück (nicht modelliert)      -> Rücksprung
+--   DC: Freigabe ohne Schema-Validierung, nur bis Anfang April       -> Kontrolle umgangen, behoben
+--   DC: neue Contract-Version ohne Review der Änderung               -> Kontrolle umgangen, aktiv
+--   DP: veröffentlicht ohne Qualitätsprüfung bzw. ohne Data Contract -> Kontrolle umgangen, aktiv
+--   DP: ab 18.05. direkt veröffentlicht (Angelegt -> Veröffentlicht) -> Kontrolle umgangen, NEU
+--   alle: ca. 4 % der Data-Owner-Freigaben durch den Antragsteller   -> Funktionstrennung verletzt
+--   alle: lange Freigabezeiten (Heavy Tail)                          -> Frist überschritten
+--
+-- Für echte Daten: diese Tabelle durch eine View auf das Audit-/Workflow-Log
+-- des Data Managers ersetzen (gleiche Spaltennamen, siehe IMPLEMENTATION_SPEC.md).
 -- =====================================================================
-CREATE SCHEMA IF NOT EXISTS main.process_mining;
+CREATE SCHEMA IF NOT EXISTS main.data_manager_pm;
 
-CREATE OR REPLACE TABLE main.process_mining.event_log AS
+CREATE OR REPLACE TABLE main.data_manager_pm.event_log AS
 WITH variants AS (
   SELECT * FROM VALUES
-    (1, 420, array('Auftrag angelegt','Kreditprüfung','Auftrag freigegeben','Lieferung','Rechnung gestellt','Zahlung erhalten')),
-    (2, 210, array('Auftrag angelegt','Auftrag freigegeben','Lieferung','Rechnung gestellt','Zahlung erhalten')),
-    (3, 130, array('Auftrag angelegt','Kreditprüfung','Auftrag freigegeben','Lieferung','Rechnung gestellt','Mahnung','Zahlung erhalten')),
-    (4,  70, array('Auftrag angelegt','Kreditprüfung','Storniert')),
-    (5,  60, array('Auftrag angelegt','Auftrag freigegeben','Preisänderung','Auftrag freigegeben','Lieferung','Rechnung gestellt','Zahlung erhalten')),
-    (6,  50, array('Auftrag angelegt','Auftrag freigegeben','Lieferung','Rechnung gestellt','Gutschrift')),
-    (7,  35, array('Auftrag angelegt','Kreditprüfung','Auftrag freigegeben','Lieferung','Storniert')),
-    (8,  25, array('Auftrag angelegt','Storniert'))
-  AS t(variant_id, n_cases, activities)
+    -- Access Request
+    ('Access Request', 1, 300, array('Beantragt','Prüfung Data Owner','Prüfung Security','Berechtigung erteilt'), DATE'2026-01-05', 26),
+    ('Access Request', 2,  40, array('Beantragt','Prüfung Data Owner','Abgelehnt'), DATE'2026-01-05', 26),
+    ('Access Request', 3,  20, array('Beantragt','Prüfung Data Owner','Prüfung Security','Abgelehnt'), DATE'2026-01-05', 26),
+    ('Access Request', 4,  90, array('Beantragt','Prüfung Data Owner','Berechtigung erteilt'), DATE'2026-03-30', 14),
+    ('Access Request', 5,  15, array('Berechtigung erteilt'), DATE'2026-01-05', 26),
+    ('Access Request', 6,  35, array('Beantragt','Prüfung Data Owner','Beantragt','Prüfung Data Owner','Prüfung Security','Berechtigung erteilt'), DATE'2026-01-05', 26),
+    -- Data Contract
+    ('Data Contract', 1, 170, array('Entwurf erstellt','Schema validiert','Review Data Owner','Freigegeben','Aktiv'), DATE'2026-01-05', 26),
+    ('Data Contract', 2,  45, array('Entwurf erstellt','Schema validiert','Review Data Owner','Freigegeben','Aktiv','Änderung beantragt','Schema erneut validiert','Review Änderung','Neue Version aktiv'), DATE'2026-01-05', 26),
+    ('Data Contract', 3,  20, array('Entwurf erstellt','Schema validiert','Review Data Owner','Verworfen'), DATE'2026-01-05', 26),
+    ('Data Contract', 4,  25, array('Entwurf erstellt','Review Data Owner','Freigegeben','Aktiv'), DATE'2026-01-05', 13),
+    ('Data Contract', 5,  40, array('Entwurf erstellt','Schema validiert','Review Data Owner','Freigegeben','Aktiv','Änderung beantragt','Neue Version aktiv'), DATE'2026-01-05', 26),
+    -- Data Product
+    ('Data Product', 1, 110, array('Angelegt','Metadaten erfasst','Data Contract verknüpft','Qualitätsprüfung','Freigabe Data Owner','Veröffentlicht'), DATE'2026-01-05', 26),
+    ('Data Product', 2,  25, array('Angelegt','Metadaten erfasst','Data Contract verknüpft','Qualitätsprüfung','Metadaten erfasst','Data Contract verknüpft','Qualitätsprüfung','Freigabe Data Owner','Veröffentlicht'), DATE'2026-01-05', 26),
+    ('Data Product', 3,  15, array('Angelegt','Metadaten erfasst','Data Contract verknüpft','Qualitätsprüfung','Freigabe Data Owner','Abgelehnt'), DATE'2026-01-05', 26),
+    ('Data Product', 4,  20, array('Angelegt','Metadaten erfasst','Data Contract verknüpft','Freigabe Data Owner','Veröffentlicht'), DATE'2026-01-05', 26),
+    ('Data Product', 5,  20, array('Angelegt','Metadaten erfasst','Qualitätsprüfung','Freigabe Data Owner','Veröffentlicht'), DATE'2026-01-05', 26),
+    ('Data Product', 6,  10, array('Angelegt','Veröffentlicht'), DATE'2026-05-18', 7)
+  AS t(process, variant_id, n_cases, activities, start_from, weeks)
 ),
 cases AS (
   SELECT
-    variant_id,
-    activities,
-    concat('ORD-', lpad(CAST(variant_id * 10000 + case_no AS STRING), 6, '0')) AS case_id,
-    element_at(array('DACH','Nordics','Benelux','Südeuropa'), CAST(pmod(case_no, 4) + 1 AS INT)) AS region,
-    -- Start gleichmäßig über 26 Wochen ab Mo 05.01.2026 verteilt. Zwei simulierte Effekte:
-    --  * Varianten ohne Kreditprüfung (2, 5, 6) erst ab Mo 02.03.2026, als hätte ein
-    --    Release die Freigabe ohne Kreditprüfung ermöglicht.
-    --  * Sofort-Storno ohne Kreditprüfung (8) nur bis Anfang April, als wäre es behoben worden.
-    CASE
-      WHEN variant_id IN (2, 5, 6) THEN timestampadd(HOUR, CAST(pmod(abs(hash(variant_id, case_no)), 18 * 7 * 24) AS INT), TIMESTAMP'2026-03-02 00:00:00')
-      WHEN variant_id = 8          THEN timestampadd(HOUR, CAST(pmod(abs(hash(variant_id, case_no)), 13 * 7 * 24) AS INT), TIMESTAMP'2026-01-05 00:00:00')
-      ELSE                              timestampadd(HOUR, CAST(pmod(abs(hash(variant_id, case_no)), 26 * 7 * 24) AS INT), TIMESTAMP'2026-01-05 00:00:00')
-    END AS case_start
-  FROM variants
-  LATERAL VIEW explode(sequence(1, n_cases)) AS case_no
+    v.process, v.variant_id, v.activities,
+    concat(CASE v.process WHEN 'Access Request' THEN 'AR' WHEN 'Data Contract' THEN 'DC' ELSE 'DP' END,
+           '-', lpad(CAST(v.variant_id * 1000 + case_no AS STRING), 5, '0')) AS case_id,
+    element_at(array('Finance', 'Sales', 'HR', 'Supply Chain'), CAST(pmod(abs(hash(v.process, case_no)), 4) + 1 AS INT)) AS domain,
+    timestampadd(HOUR, CAST(pmod(abs(hash(v.process, v.variant_id, case_no)), v.weeks * 7 * 24) AS INT),
+                 CAST(v.start_from AS TIMESTAMP)) AS case_start
+  FROM variants v
+  LATERAL VIEW explode(sequence(1, v.n_cases)) AS case_no
+),
+people AS (
+  SELECT *,
+    concat('user_',     lpad(CAST(pmod(abs(hash(case_id, 'req')), 80) AS STRING), 3, '0')) AS requester,
+    concat('owner_',    lpad(CAST(pmod(abs(hash(case_id, 'own')), 20) AS STRING), 2, '0')) AS data_owner,
+    concat('security_', lpad(CAST(pmod(abs(hash(case_id, 'sec')),  5) AS STRING), 2, '0')) AS security_officer,
+    concat('admin_',    lpad(CAST(pmod(abs(hash(case_id, 'adm')),  4) AS STRING), 2, '0')) AS admin,
+    pmod(abs(hash(case_id, 'sod')), 100) < 4 AS sod_violation   -- ca. 4 %: Data Owner = Antragsteller
+  FROM cases
 )
 SELECT
-  c.case_id,
-  c.region,
-  c.variant_id,
-  a.pos            AS step_no,
+  p.process,
+  p.case_id,
+  p.domain,
+  a.pos AS step_no,
   a.activity,
-  -- Wartezeit bis zur Aktivität = typische Dauer je Aktivität × Faktor 0,5–1,5
-  -- (deterministisch pseudo-zufällig, damit Engpässe sichtbar werden)
+  CASE
+    WHEN a.pos = 0 AND a.activity = 'Berechtigung erteilt' THEN p.admin            -- Vergabe ohne Antrag
+    WHEN a.pos = 0 THEN p.requester
+    WHEN a.activity IN ('Prüfung Data Owner', 'Review Data Owner', 'Freigabe Data Owner', 'Review Änderung')
+      THEN IF(p.sod_violation, p.requester, p.data_owner)
+    WHEN a.activity = 'Prüfung Security' THEN p.security_officer
+    WHEN a.activity IN ('Berechtigung erteilt', 'Schema validiert', 'Schema erneut validiert',
+                        'Qualitätsprüfung', 'Veröffentlicht', 'Aktiv', 'Neue Version aktiv') THEN 'system'
+    ELSE p.requester
+  END AS actor,
+  -- Wartezeit bis zur Aktivität = typische Dauer × Faktor; Freigaben mit langem Ausläufer (Fristverletzungen)
   timestampadd(
-    HOUR,
-    CAST(aggregate(sequence(0, a.pos), 0D, (acc, i) -> acc + IF(i = 0, 0D,
+    MINUTE,
+    CAST(60 * aggregate(sequence(0, a.pos), 0D, (acc, i) -> acc + IF(i = 0, 0D,
       element_at(map(
-        'Kreditprüfung', 6D, 'Auftrag freigegeben', 10D, 'Preisänderung', 36D,
-        'Lieferung', 52D, 'Rechnung gestellt', 8D, 'Zahlung erhalten', 260D,
-        'Mahnung', 340D, 'Gutschrift', 96D, 'Storniert', 30D
-      ), element_at(c.activities, i + 1))
-      * (0.5 + pmod(abs(hash(c.case_id, i)), 100) / 100.0))) AS INT),
-    c.case_start
+        'Beantragt', 4D, 'Prüfung Data Owner', 30D, 'Prüfung Security', 24D, 'Berechtigung erteilt', 3D, 'Abgelehnt', 4D,
+        'Entwurf erstellt', 4D, 'Schema validiert', 1D, 'Review Data Owner', 40D, 'Freigegeben', 4D, 'Aktiv', 6D, 'Verworfen', 8D,
+        'Änderung beantragt', 500D, 'Schema erneut validiert', 1D, 'Review Änderung', 36D, 'Neue Version aktiv', 6D,
+        'Angelegt', 4D, 'Metadaten erfasst', 20D, 'Data Contract verknüpft', 30D, 'Qualitätsprüfung', 12D,
+        'Freigabe Data Owner', 40D, 'Veröffentlicht', 4D
+      ), element_at(p.activities, i + 1))
+      * IF(element_at(p.activities, i + 1) IN ('Prüfung Data Owner', 'Review Data Owner', 'Freigabe Data Owner', 'Prüfung Security', 'Review Änderung'),
+           0.3D + 4D * pow(pmod(abs(hash(p.case_id, i)), 1000) / 1000D, 4),
+           0.5D + pmod(abs(hash(p.case_id, i)), 1000) / 1000D))) AS INT),
+    p.case_start
   ) AS event_ts
-FROM cases c
-LATERAL VIEW posexplode(c.activities) a AS pos, activity;
+FROM people p
+LATERAL VIEW posexplode(p.activities) a AS pos, activity;

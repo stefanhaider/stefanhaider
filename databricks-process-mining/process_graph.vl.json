@@ -1,6 +1,6 @@
 {
   "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
-  "description": "Soll-Ist-Prozessgraph. Layout und Konformität kommen aus 03_process_graph_dataset.sql.",
+  "description": "Soll-Ist-Prozessgraph eines Data-Manager-Prozesses. Layout, Konformität und Kontrollschritte kommen aus 04_ds_process_graph.sql.",
   "width": "container",
   "height": "container",
   "data": {
@@ -19,6 +19,38 @@
     {
       "transform": [
         {
+          "filter": "datum.row_type === 'frame'"
+        }
+      ],
+      "mark": {
+        "type": "point",
+        "opacity": 0
+      },
+      "encoding": {
+        "x": {
+          "field": "x",
+          "type": "quantitative",
+          "scale": {
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        },
+        "y": {
+          "field": "y",
+          "type": "quantitative",
+          "scale": {
+            "reverse": true,
+            "nice": false,
+            "zero": false
+          },
+          "axis": null
+        }
+      }
+    },
+    {
+      "transform": [
+        {
           "filter": "datum.row_type === 'edge'"
         }
       ],
@@ -32,10 +64,6 @@
           "field": "x",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              800
-            ],
             "nice": false,
             "zero": false
           },
@@ -45,10 +73,6 @@
           "field": "y",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              700
-            ],
             "reverse": true,
             "nice": false,
             "zero": false
@@ -81,11 +105,13 @@
           "scale": {
             "domain": [
               "soll",
-              "abweichung"
+              "abweichung",
+              "kontrolle_umgangen"
             ],
             "range": [
               "#8f8e88",
-              "#eb6834"
+              "#eb6834",
+              "#d03b3b"
             ]
           },
           "legend": {
@@ -93,7 +119,7 @@
             "orient": "top-left",
             "direction": "vertical",
             "symbolType": "stroke",
-            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : 'Abweichung'"
+            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : datum.label === 'abweichung' ? 'Abweichung' : 'Kontrolle umgangen'"
           }
         },
         "strokeDash": {
@@ -102,12 +128,17 @@
           "scale": {
             "domain": [
               "soll",
-              "abweichung"
+              "abweichung",
+              "kontrolle_umgangen"
             ],
             "range": [
               [
                 1,
                 0
+              ],
+              [
+                6,
+                4
               ],
               [
                 6,
@@ -120,7 +151,7 @@
             "orient": "top-left",
             "direction": "vertical",
             "symbolType": "stroke",
-            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : 'Abweichung'"
+            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : datum.label === 'abweichung' ? 'Abweichung' : 'Kontrolle umgangen'"
           }
         }
       }
@@ -141,10 +172,6 @@
           "field": "x",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              800
-            ],
             "nice": false,
             "zero": false
           },
@@ -154,10 +181,6 @@
           "field": "y",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              700
-            ],
             "reverse": true,
             "nice": false,
             "zero": false
@@ -187,11 +210,13 @@
           "scale": {
             "domain": [
               "soll",
-              "abweichung"
+              "abweichung",
+              "kontrolle_umgangen"
             ],
             "range": [
               "#8f8e88",
-              "#eb6834"
+              "#eb6834",
+              "#d03b3b"
             ]
           }
         }
@@ -215,7 +240,7 @@
           "as": "pill"
         },
         {
-          "calculate": "datum.conformance === 'soll' ? 'erlaubt' : 'Abweichung'",
+          "calculate": "datum.conformance === 'soll' ? 'erlaubt' : datum.finding_type",
           "as": "status"
         }
       ],
@@ -241,11 +266,13 @@
               "scale": {
                 "domain": [
                   "soll",
-                  "abweichung"
+                  "abweichung",
+                  "kontrolle_umgangen"
                 ],
                 "range": [
                   "#c3c2b7",
-                  "#eb6834"
+                  "#eb6834",
+                  "#d03b3b"
                 ]
               }
             }
@@ -270,10 +297,6 @@
           "field": "x",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              800
-            ],
             "nice": false,
             "zero": false
           },
@@ -283,10 +306,6 @@
           "field": "y",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              700
-            ],
             "reverse": true,
             "nice": false,
             "zero": false
@@ -307,7 +326,7 @@
           {
             "field": "status",
             "type": "nominal",
-            "title": "Status"
+            "title": "Befund"
           },
           {
             "field": "cases",
@@ -327,26 +346,26 @@
     {
       "transform": [
         {
-          "filter": "datum.row_type === 'node' && datum.node_kind === 'activity'"
+          "filter": "(datum.row_type === 'node' && datum.node_kind === 'activity') || datum.row_type === 'frame'"
         },
         {
-          "calculate": "datum.x - datum.w / 2",
+          "calculate": "datum.x - (datum.w || 0) / 2",
           "as": "x_lo"
         },
         {
-          "calculate": "datum.x + datum.w / 2",
+          "calculate": "datum.x + (datum.w || 0) / 2",
           "as": "x_hi"
         },
         {
-          "calculate": "datum.y - datum.h / 2",
+          "calculate": "datum.y - (datum.h || 0) / 2",
           "as": "y_lo"
         },
         {
-          "calculate": "datum.y + datum.h / 2",
+          "calculate": "datum.y + (datum.h || 0) / 2",
           "as": "y_hi"
         },
         {
-          "calculate": "datum.x - datum.w / 2 + 8",
+          "calculate": "datum.x - (datum.w || 0) / 2 + 8",
           "as": "x_txt"
         },
         {
@@ -354,7 +373,7 @@
           "as": "cases_txt"
         },
         {
-          "calculate": "datum.conformance === 'soll' ? 'Teil des Soll-Prozesses' : 'Nicht im Soll-Prozess'",
+          "calculate": "datum.conformance !== 'soll' ? 'Nicht im Soll-Prozess' : datum.is_control === 1 ? 'Kontrollschritt im Soll-Prozess' : 'Teil des Soll-Prozesses'",
           "as": "status"
         }
       ],
@@ -362,7 +381,7 @@
         {
           "transform": [
             {
-              "filter": "datum.conformance === 'soll'"
+              "filter": "datum.conformance === 'soll' && datum.row_type !== 'frame'"
             }
           ],
           "mark": {
@@ -376,10 +395,6 @@
               "field": "x_lo",
               "type": "quantitative",
               "scale": {
-                "domain": [
-                  0,
-                  800
-                ],
                 "nice": false,
                 "zero": false
               },
@@ -392,10 +407,6 @@
               "field": "y_lo",
               "type": "quantitative",
               "scale": {
-                "domain": [
-                  0,
-                  700
-                ],
                 "reverse": true,
                 "nice": false,
                 "zero": false
@@ -421,7 +432,7 @@
         {
           "transform": [
             {
-              "filter": "datum.conformance === 'abweichung'"
+              "filter": "datum.conformance === 'abweichung' || datum.row_type === 'frame'"
             }
           ],
           "mark": {
@@ -440,10 +451,6 @@
               "field": "x_lo",
               "type": "quantitative",
               "scale": {
-                "domain": [
-                  0,
-                  800
-                ],
                 "nice": false,
                 "zero": false
               },
@@ -456,10 +463,6 @@
               "field": "y_lo",
               "type": "quantitative",
               "scale": {
-                "domain": [
-                  0,
-                  700
-                ],
                 "reverse": true,
                 "nice": false,
                 "zero": false
@@ -468,6 +471,20 @@
             },
             "y2": {
               "field": "y_hi"
+            },
+            "strokeOpacity": {
+              "condition": {
+                "test": "datum.row_type === 'frame'",
+                "value": 0
+              },
+              "value": 1
+            },
+            "fillOpacity": {
+              "condition": {
+                "test": "datum.row_type === 'frame'",
+                "value": 0
+              },
+              "value": 1
             }
           }
         },
@@ -486,7 +503,12 @@
               "field": "id",
               "type": "nominal"
             }
-          }
+          },
+          "transform": [
+            {
+              "filter": "datum.row_type !== 'frame'"
+            }
+          ]
         },
         {
           "mark": {
@@ -502,6 +524,43 @@
               "field": "cases_txt",
               "type": "nominal"
             }
+          },
+          "transform": [
+            {
+              "filter": "datum.row_type !== 'frame'"
+            }
+          ]
+        },
+        {
+          "transform": [
+            {
+              "filter": "datum.is_control === 1 && datum.row_type !== 'frame'"
+            },
+            {
+              "calculate": "datum.x + datum.w / 2 - 8",
+              "as": "x_tag"
+            }
+          ],
+          "mark": {
+            "type": "text",
+            "align": "right",
+            "baseline": "middle",
+            "dy": 8,
+            "fontSize": 9,
+            "fontWeight": 600,
+            "color": "#52514e",
+            "text": "◆ KONTROLLE"
+          },
+          "encoding": {
+            "x": {
+              "field": "x_tag",
+              "type": "quantitative",
+              "scale": {
+                "nice": false,
+                "zero": false
+              },
+              "axis": null
+            }
           }
         }
       ],
@@ -510,10 +569,6 @@
           "field": "x_txt",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              800
-            ],
             "nice": false,
             "zero": false
           },
@@ -523,10 +578,6 @@
           "field": "y",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              700
-            ],
             "reverse": true,
             "nice": false,
             "zero": false
@@ -602,10 +653,6 @@
           "field": "x",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              800
-            ],
             "nice": false,
             "zero": false
           },
@@ -615,10 +662,6 @@
           "field": "y",
           "type": "quantitative",
           "scale": {
-            "domain": [
-              0,
-              700
-            ],
             "reverse": true,
             "nice": false,
             "zero": false
