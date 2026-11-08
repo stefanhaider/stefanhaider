@@ -23,8 +23,10 @@ Soll-Prozessen entsprechen**, und macht **Prozesslücken und Governance-Brüche*
 Umgesetzt ohne Databricks App, nur mit Delta-Tabellen, Views, AI/BI Dashboard (inkl. Custom
 Viz mit Vega-Lite) und SQL Alert.
 
-**Für die Implementierung:** [`IMPLEMENTATION_SPEC.md`](IMPLEMENTATION_SPEC.md). Dort stehen alle
-Regeln, Datenformate, Abnahmewerte und offenen Fragen.
+**Für die Implementierung:** Einstieg für den implementierenden Agenten ist
+[`AGENTS.md`](AGENTS.md) (Leitplanken, Arbeitspakete, Prüfungen). Den fertigen Auftrag zum
+Hineinkopieren enthält [`HANDOFF_PROMPT.md`](HANDOFF_PROMPT.md). Alle Regeln, Datenformate,
+Abnahmewerte und offenen Fragen stehen in [`IMPLEMENTATION_SPEC.md`](IMPLEMENTATION_SPEC.md).
 
 ## Übersicht
 
@@ -66,7 +68,10 @@ niemand nutzt. ◆ markiert Kontrollschritte.
 | `process_graph.vl.json` | Vega-Lite-Spezifikation für Custom Viz |
 | `process_mining.lvdash.json` | Dashboard-Entwurf zum Import (ungetestet; ohne Prozessgraph, dafür ein Platzhalter) |
 | `dashboard.html` | Interaktives Mockup, im Browser öffnen, funktioniert offline |
-| `IMPLEMENTATION_SPEC.md` | Übergabe zur Implementierung |
+| `AGENTS.md` | **Einstieg für den System-Agenten:** Ziel, Leitplanken, Arbeitspakete AP1–AP10 mit Prüfungen, Definition of Done |
+| `HANDOFF_PROMPT.md` | Fertiger Übergabe-Prompt und Checkliste für Zugänge |
+| `IMPLEMENTATION_SPEC.md` | Vollständige Spezifikation zur Implementierung |
+| `tools/` | Prüfwerkzeuge: `verify_all.sh`, `local_sql_check.py` (Abnahmewerte), `check_vega_spec.mjs` (Render-Check) |
 
 ## Schnellstart
 
@@ -86,6 +91,8 @@ niemand nutzt. ◆ markiert Kontrollschritte.
 Neue Prozesse oder Prozessänderungen pflegst du **nur in `02_process_model.sql`**.
 
 ## Status
+
+`bash tools/verify_all.sh` prüft alles lokal (Ergebnis zuletzt: **ALLES BESTANDEN**).
 
 Alle SQL-Dateien außer `11_…` und `12_…` sind lokal mit Apache Spark 4.0.1 getestet. Das
 Python-Paket hat 10 grüne Tests, der Kern braucht nur die Standardbibliothek. Die Vega-Lite-Spezifikation

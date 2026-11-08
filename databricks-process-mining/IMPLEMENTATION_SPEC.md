@@ -496,7 +496,7 @@ orange, grün) nur dafür verwenden.
    anlegen.
 7. Dashboard laut Abschnitt 8 aufbauen. Custom Viz mit `process_graph.vl.json`; Felder **ohne
    Aggregation**: `row_type, id, src, tgt, cases, median_wait_h, x, y, w, h, seq, shape, node_kind,
-   conformance, is_control, finding_type`.
+   conformance, is_control, finding_type, system_status`.
 8. SQL Alert aus `08_…` einrichten, täglich, Empfänger je Process Owner.
 8a. **Im Data Manager (Python)** das Paket `datamanager_governance` einbinden
     ([`EVENT_STANDARD.md`](EVENT_STANDARD.md), Abschnitt 7):
@@ -600,7 +600,14 @@ Diese Werte müssen exakt herauskommen:
 
 ---
 
-## 13. Lokal testen ohne Workspace (optional)
+## 13. Lokal testen ohne Workspace
+
+**Alles auf einmal:** `bash tools/verify_all.sh`. Das Skript führt pytest, den CI-Check,
+`tools/local_sql_check.py` (alle Abnahmewerte aus Abschnitt 10 als Assertions, schreibt
+`build/graph_*.json`) und `tools/check_vega_spec.mjs` (Render-Check ohne Warnungen) aus. Für
+den Einstieg des implementierenden Agenten siehe [`AGENTS.md`](AGENTS.md).
+
+Einzeln:
 
 * **Python-Paket:** `pip install -e ./python[test] && pytest python/tests`.
 * **SQL:** PySpark 4.x; `main.data_manager_pm.` durch ein lokales Schema ersetzen, `CREATE OR

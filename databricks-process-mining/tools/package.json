@@ -1,0 +1,8 @@
+{
+  "name": "dm-vega-check",
+  "private": true,
+  "type": "module",
+  "description": "Kompiliert und rendert process_graph.vl.json mit Vega-Lite; schlägt bei Warnungen fehl.",
+  "scripts": { "check": "node check_vega_spec.mjs" },
+  "dependencies": { "vega": "^6.2.0", "vega-lite": "^6.4.0" }
+}
