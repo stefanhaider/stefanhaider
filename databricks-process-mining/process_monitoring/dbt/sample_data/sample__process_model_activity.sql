@@ -1,3 +1,4 @@
+{{ config(enabled = var('use_sample_data') | as_bool, materialized = 'table', tags = ['sample']) }}
 SELECT * FROM VALUES
   ('2026.1', 'Access Request', '▶ Start',                  0, false, false),
   ('2026.1', 'Access Request', 'Beantragt',                1, false, false),

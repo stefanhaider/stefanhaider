@@ -1,3 +1,4 @@
+{{ config(enabled = var('use_sample_data') | as_bool, materialized = 'table', tags = ['sample']) }}
 SELECT * FROM VALUES
   ('2.2', TIMESTAMP'2026-01-01 00:00:00', 'Ausgangsstand'),
   ('2.3', TIMESTAMP'2026-03-30 00:00:00', 'Access Request: Security-Prüfung für interne Datenprodukte optional'),

@@ -1,4 +1,4 @@
--- Soll-Ist-Prozessgraph je Prozess und domain_scope ('Alle' oder eine Domäne) für die Custom Viz
+-- Data Contract: Soll-Ist-Prozessgraph je Prozess und domain_scope ('Alle' oder eine Domäne) für die Custom Viz
 -- (../../src/dashboards/process_graph.vl.json). Das Dashboard filtert auf process und domain_scope.
 --
 -- Vega-Lite kann Graphen nicht anordnen; dieses Modell berechnet das Layout (Positionen aus dem

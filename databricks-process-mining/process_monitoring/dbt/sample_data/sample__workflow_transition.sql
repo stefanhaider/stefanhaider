@@ -1,3 +1,4 @@
+{{ config(enabled = var('use_sample_data') | as_bool, materialized = 'table', tags = ['sample']) }}
 -- Status-Maschine je Release, wie sie dm-sync-governance bei jedem Deploy schreiben würde.
 -- Basis: alle Soll-Übergänge außer "Review Änderung → Verworfen" (im System nicht implementiert),
 -- plus zusätzliche Übergänge mit Gültigkeit von/bis Release.

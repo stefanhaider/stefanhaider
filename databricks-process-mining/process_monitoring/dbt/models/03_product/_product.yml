@@ -1,0 +1,469 @@
+# Data Contract des Data Products "process_monitoring".
+# Nur Modelle in 03_product sind für Konsumenten freigegeben (access: public). Ihr Schema ist per
+# dbt-Contract erzwungen: jede Abweichung von Spaltennamen oder Datentypen lässt `dbt build` scheitern.
+# Diese Definition ist die Vorlage für die Data Contracts, die im Data Manager registriert werden.
+version: 2
+models:
+- name: mart_case_conformance
+  description: 'Ein Datensatz je Vorgang (alle Prozesse): Konformität, Flags je Befund-Art, Liste der Befunde.'
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: process
+    data_type: string
+    description: Prozess des Data Managers (z. B. Access Request, Data Contract, Data Product)
+    data_tests:
+    - not_null
+  - name: case_id
+    data_type: string
+    description: ID des Vorgangs im Data Manager
+    data_tests:
+    - not_null
+  - name: domain
+    data_type: string
+    description: Datendomäne bzw. Owner-Team des Vorgangs
+  - name: initiator
+    data_type: string
+    description: Person bzw. Account, die den Vorgang gestartet hat (personenbezogen)
+  - name: start_channel
+    data_type: string
+    description: Kanal des ersten Events
+  - name: case_start
+    data_type: timestamp
+    description: Zeitpunkt des ersten Statuswechsels
+  - name: throughput_days
+    data_type: decimal(10,2)
+    description: Durchlaufzeit vom ersten bis zum letzten Statuswechsel in Tagen
+  - name: is_conformant
+    data_type: int
+    description: 1 = alle Übergänge laut Soll-Prozess erlaubt
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - 0
+          - 1
+  - name: is_compliant
+    data_type: int
+    description: 1 = konform und kein Regelverstoß (Funktionstrennung, Frist)
+  - name: has_outside_workflow
+    data_type: int
+    description: 1 = mindestens ein Übergang war zum Zeitpunkt laut Status-Maschine nicht erlaubt
+  - name: n_findings
+    data_type: int
+    description: Anzahl Befunde des Vorgangs
+  - name: has_critical
+    data_type: int
+    description: 1 = mindestens ein kritischer Befund
+  - name: has_control_bypass
+    data_type: int
+    description: 1 = Kontrolle umgangen
+  - name: has_sod_violation
+    data_type: int
+    description: 1 = Funktionstrennung verletzt
+  - name: has_sla_breach
+    data_type: int
+    description: 1 = Frist überschritten
+  - name: findings
+    data_type: string
+    description: Befunde des Vorgangs, getrennt durch ' | '
+  - name: process_owner
+    data_type: string
+    description: verantwortliche Organisationseinheit des Prozesses
+  data_tests:
+  - dbt_utils_free_unique_combination:
+      arguments:
+        columns:
+        - process
+        - case_id
+- name: mart_findings
+  description: Jedes Befund-Vorkommen (Pfad-Abweichungen und Regelverstöße).
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: process
+    data_type: string
+    description: Prozess des Data Managers (z. B. Access Request, Data Contract, Data Product)
+  - name: case_id
+    data_type: string
+    description: ID des Vorgangs im Data Manager
+  - name: domain
+    data_type: string
+    description: Datendomäne bzw. Owner-Team des Vorgangs
+  - name: finding_type
+    data_type: string
+    description: Befund-Typ (siehe Seed finding_severity)
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('finding_severity')
+          field: finding_type
+  - name: finding
+    data_type: string
+    description: lesbare Beschreibung des Befunds
+  - name: transition
+    data_type: string
+    description: Übergang 'Von → Nach'
+  - name: event_ts
+    data_type: timestamp
+    description: Zeitpunkt des Events
+  - name: actor
+    data_type: string
+    description: ausführende Person bzw. Account (personenbezogen)
+  - name: channel
+    data_type: string
+    description: 'Kanal: ui, api, admin_api, batch, migration, system'
+  - name: app_version
+    data_type: string
+    description: Release des Data Managers zum Eventzeitpunkt
+  - name: system_status
+    data_type: string
+    description: '''vom System erlaubt'' | ''außerhalb des Workflows'' | ''Regelprüfung'' bzw. im Graphen ''erlaubt, ungenutzt'''
+  - name: severity
+    data_type: string
+    description: 'Schwere: kritisch, hoch, mittel'
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - kritisch
+          - hoch
+          - mittel
+  - name: severity_rank
+    data_type: int
+    description: 1 = kritisch, 2 = hoch, 3 = mittel, 4 = ohne
+  - name: recommended_action
+    data_type: string
+    description: empfohlene Maßnahme
+  - name: source
+    data_type: string
+    description: '''Prozesspfad'' oder ''Regel <rule_id>'''
+  - name: process_owner
+    data_type: string
+    description: verantwortliche Organisationseinheit des Prozesses
+- name: mart_findings_summary
+  description: 'Je Prozess, domain_scope und Befund: Status neu / tritt weiterhin auf / nicht mehr aufgetreten, Verantwortliche, Maßnahme.'
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: process
+    data_type: string
+    description: Prozess des Data Managers (z. B. Access Request, Data Contract, Data Product)
+  - name: domain_scope
+    data_type: string
+    description: 'Filterebene: ''Alle'' oder eine Datendomäne (vorberechnet, kein Dashboard-Parameter nötig)'
+  - name: finding_type
+    data_type: string
+    description: Befund-Typ (siehe Seed finding_severity)
+  - name: finding
+    data_type: string
+    description: lesbare Beschreibung des Befunds
+  - name: severity
+    data_type: string
+    description: 'Schwere: kritisch, hoch, mittel'
+  - name: severity_rank
+    data_type: int
+    description: 1 = kritisch, 2 = hoch, 3 = mittel, 4 = ohne
+  - name: cases
+    data_type: bigint
+    description: Anzahl betroffener Vorgänge bzw. Übergänge
+  - name: pct_of_cases
+    data_type: decimal(5,1)
+    description: Anteil betroffener Vorgänge in %
+  - name: cases_last_4w
+    data_type: bigint
+    description: betroffene Vorgänge unter den in den letzten 28 Tagen gestarteten
+  - name: pct_last_4w
+    data_type: decimal(5,1)
+    description: Anteil in den letzten 28 Tagen in %
+  - name: first_seen
+    data_type: date
+    description: erstes Vorkommen (Datum)
+  - name: last_seen
+    data_type: date
+    description: letztes Vorkommen (Datum)
+  - name: status
+    data_type: string
+    description: '''neu'' | ''tritt weiterhin auf'' | ''nicht mehr aufgetreten'''
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - neu
+          - tritt weiterhin auf
+          - nicht mehr aufgetreten
+  - name: recommended_action
+    data_type: string
+    description: empfohlene Maßnahme
+  - name: channels
+    data_type: string
+    description: beteiligte Kanäle
+  - name: first_release
+    data_type: string
+    description: Release des ersten Vorkommens
+  - name: system_status
+    data_type: string
+    description: '''vom System erlaubt'' | ''außerhalb des Workflows'' | ''Regelprüfung'' bzw. im Graphen ''erlaubt, ungenutzt'''
+  - name: process_owner
+    data_type: string
+    description: verantwortliche Organisationseinheit des Prozesses
+  data_tests:
+  - dbt_utils_free_unique_combination:
+      arguments:
+        columns:
+        - process
+        - domain_scope
+        - finding_type
+        - finding
+        - severity
+- name: mart_system_conformance
+  description: Soll-Prozess vs. Status-Maschine vs. Ist je Übergang (System-Prozess-Konformität).
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: process
+    data_type: string
+    description: Prozess des Data Managers (z. B. Access Request, Data Contract, Data Product)
+  - name: src
+    data_type: string
+    description: Von-Aktivität
+  - name: tgt
+    data_type: string
+    description: Nach-Aktivität
+  - name: transition
+    data_type: string
+    description: Übergang 'Von → Nach'
+  - name: in_soll
+    data_type: boolean
+    description: Übergang im aktuellen Soll-Prozess erlaubt
+  - name: in_system
+    data_type: boolean
+    description: Übergang in der aktuellen Status-Maschine erlaubt
+  - name: observed_cases
+    data_type: bigint
+    description: Vorgänge, in denen der Übergang vorkam
+  - name: cases_outside_workflow
+    data_type: bigint
+    description: davon zum Zeitpunkt nicht vom System erlaubt
+  - name: rejected_attempts
+    data_type: bigint
+    description: vom System abgewiesene Versuche
+  - name: channels
+    data_type: string
+    description: beteiligte Kanäle
+  - name: first_seen
+    data_type: date
+    description: erstes Vorkommen (Datum)
+  - name: last_seen
+    data_type: date
+    description: letztes Vorkommen (Datum)
+  - name: system_note
+    data_type: string
+    description: Hinweis aus der Status-Maschine
+  - name: since_release
+    data_type: string
+    description: seit welchem Release erlaubt
+  - name: removed_at
+    data_type: timestamp
+    description: Zeitpunkt, ab dem das System den Übergang nicht mehr erlaubt
+  - name: finding_type
+    data_type: string
+    description: Befund-Typ (siehe Seed finding_severity)
+  - name: skipped_controls
+    data_type: string
+    description: übersprungene Kontrollschritte
+  - name: system_category
+    data_type: string
+    description: Kategorie der System-Prozess-Konformität
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - Umgehung außerhalb des Workflows
+          - Soll-Schritt nicht implementiert
+          - System lässt mehr zu – genutzt
+          - System lässt mehr zu – latent
+          - Nicht mehr erlaubt
+          - Vom System abgewiesen
+          - Konform
+  - name: severity
+    data_type: string
+    description: 'Schwere: kritisch, hoch, mittel'
+  - name: severity_rank
+    data_type: int
+    description: 1 = kritisch, 2 = hoch, 3 = mittel, 4 = ohne
+  - name: process_owner
+    data_type: string
+    description: verantwortliche Organisationseinheit des Prozesses
+  data_tests:
+  - dbt_utils_free_unique_combination:
+      arguments:
+        columns:
+        - process
+        - src
+        - tgt
+- name: mart_rejected_attempts
+  description: Vom Data Manager abgewiesene Statuswechsel (Nachweis wirksamer Kontrollen).
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: process
+    data_type: string
+    description: Prozess des Data Managers (z. B. Access Request, Data Contract, Data Product)
+  - name: case_id
+    data_type: string
+    description: ID des Vorgangs im Data Manager
+  - name: domain
+    data_type: string
+    description: Datendomäne bzw. Owner-Team des Vorgangs
+  - name: from_activity
+    data_type: string
+    description: Status vor dem Versuch
+  - name: attempted_activity
+    data_type: string
+    description: versuchter Zielstatus
+  - name: attempted_transition
+    data_type: string
+    description: versuchter Übergang
+  - name: actor
+    data_type: string
+    description: ausführende Person bzw. Account (personenbezogen)
+  - name: channel
+    data_type: string
+    description: 'Kanal: ui, api, admin_api, batch, migration, system'
+  - name: app_version
+    data_type: string
+    description: Release des Data Managers zum Eventzeitpunkt
+  - name: event_ts
+    data_type: timestamp
+    description: Zeitpunkt des Events
+  - name: finding_type
+    data_type: string
+    description: Befund-Typ (siehe Seed finding_severity)
+  - name: attempt
+    data_type: string
+    description: lesbare Beschreibung des Versuchs
+  - name: process_owner
+    data_type: string
+    description: verantwortliche Organisationseinheit des Prozesses
+- name: mart_process_graph
+  description: Geometrie des Soll-Ist-Prozessgraphen je process und domain_scope (Custom Viz process_graph.vl.json).
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: process
+    data_type: string
+    description: Prozess des Data Managers (z. B. Access Request, Data Contract, Data Product)
+  - name: domain_scope
+    data_type: string
+    description: 'Filterebene: ''Alle'' oder eine Datendomäne (vorberechnet, kein Dashboard-Parameter nötig)'
+  - name: row_type
+    data_type: string
+    description: node | edge | arrow | label | frame
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - node
+          - edge
+          - arrow
+          - label
+          - frame
+  - name: id
+    data_type: string
+    description: Aktivität bzw. 'Von → Nach'
+  - name: src
+    data_type: string
+    description: Von-Aktivität
+  - name: tgt
+    data_type: string
+    description: Nach-Aktivität
+  - name: cases
+    data_type: bigint
+    description: Anzahl betroffener Vorgänge bzw. Übergänge
+  - name: median_wait_h
+    data_type: double
+    description: Median-Wartezeit des Übergangs in Stunden
+  - name: x
+    data_type: double
+    description: x-Koordinate (Raster 800 breit)
+  - name: y
+    data_type: double
+    description: y-Koordinate (nach unten)
+  - name: w
+    data_type: double
+    description: Breite des Knotens
+  - name: h
+    data_type: double
+    description: Höhe des Knotens
+  - name: seq
+    data_type: int
+    description: Reihenfolge der Kanten-Stützpunkte
+  - name: shape
+    data_type: string
+    description: Pfeilrichtung (triangle-down/left/right)
+  - name: node_kind
+    data_type: string
+    description: start | end | activity
+  - name: conformance
+    data_type: string
+    description: soll | abweichung | kontrolle_umgangen | latent
+    data_tests:
+    - accepted_values:
+        arguments:
+          values:
+          - soll
+          - abweichung
+          - kontrolle_umgangen
+          - latent
+  - name: is_control
+    data_type: int
+    description: 1 = Kontrollschritt im Soll-Prozess
+  - name: finding_type
+    data_type: string
+    description: Befund-Typ (siehe Seed finding_severity)
+  - name: system_status
+    data_type: string
+    description: '''vom System erlaubt'' | ''außerhalb des Workflows'' | ''Regelprüfung'' bzw. im Graphen ''erlaubt, ungenutzt'''
+- name: mart_alert_critical_findings
+  description: Neue bzw. aktuelle kritische Befunde – Grundlage des Alarms.
+  config:
+    contract:
+      enforced: true
+  columns:
+  - name: process
+    data_type: string
+    description: Prozess des Data Managers (z. B. Access Request, Data Contract, Data Product)
+  - name: finding_type
+    data_type: string
+    description: Befund-Typ (siehe Seed finding_severity)
+  - name: finding
+    data_type: string
+    description: lesbare Beschreibung des Befunds
+  - name: cases_last_7d
+    data_type: bigint
+    description: betroffene Vorgänge mit Start in den letzten 7 Tagen
+  - name: first_seen
+    data_type: date
+    description: erstes Vorkommen (Datum)
+  - name: is_new
+    data_type: boolean
+    description: erstes Vorkommen in den letzten 56 Tagen
+  - name: example_cases
+    data_type: string
+    description: bis zu 5 Beispiel-Vorgänge
+  - name: channels
+    data_type: string
+    description: beteiligte Kanäle
+  - name: system_status
+    data_type: string
+    description: '''vom System erlaubt'' | ''außerhalb des Workflows'' | ''Regelprüfung'' bzw. im Graphen ''erlaubt, ungenutzt'''
+  - name: process_owner
+    data_type: string
+    description: verantwortliche Organisationseinheit des Prozesses

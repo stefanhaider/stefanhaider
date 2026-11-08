@@ -64,7 +64,7 @@ Fachlich ist das Conformance Checking auf Directly-Follows-Beziehungen plus Rege
 │ dbt-Projekt (Data Product):                                               │
 │   staging (stg_dm__*; process_event inkrementell per MERGE)               │
 │   intermediate (Klassifizierung, Historie der Status-Maschine, Befunde)   │
-│   marts (mart_*) ─► AI/BI Dashboard (3 Seiten, Custom Viz Prozessgraph)   │
+│   03_product (mart_*, Data Contract) ─► AI/BI Dashboard, Alarm          │
 │ Job process_monitoring_refresh (alle 15 Min.): dbt build ─► Alarm-Task    │
 └───────────────────────────────────────────────────────────────────────────┘
 ```
@@ -85,7 +85,7 @@ Fachlich ist das Conformance Checking auf Directly-Follows-Beziehungen plus Rege
 | `process_monitoring/databricks.yml` | Databricks | Bundle-Definition, Variablen, Targets dev/prod |
 | `process_monitoring/resources/` | Databricks | Job `process_monitoring_refresh` (dbt + Alarm), Dashboard-Ressource |
 | `process_monitoring/setup/01_unity_catalog_connection.sql` | Databricks | einmalig: Connection, Foreign Catalog, Grants, Vollständigkeitskontrolle |
-| `process_monitoring/dbt/` | Databricks | **dbt-Projekt = Data Product** (Modelle, Seeds, Tests, Beispieldaten) |
+| `process_monitoring/dbt/` | Databricks | **dbt-Projekt = Data Product**: `models/01_staging`, `02_intermediate`, `03_product` (Data Contract), `sample_data/`, Seeds, Tests |
 | `process_monitoring/src/dashboards/` | Databricks | `process_monitoring.lvdash.json` (Entwurf), `process_graph.vl.json` (Custom Viz) |
 | `process_monitoring/src/sql/alert_critical_findings.sql` | Databricks | Alarm-Task |
 | `mockup/` | – | interaktives Zielbild `dashboard.html` (offline), Screenshots |
@@ -179,17 +179,29 @@ abgelaufene blockieren wieder). Exit-Code 1 bei offenen kritischen Befunden.
 - `CREATE FOREIGN CATALOG dm_pg`,
 - Grants für den Job-Service-Principal.
 
-Das dbt-Projekt liest `dm_pg.governance.*` als Quellen (`models/sources.yml`, var `dm_catalog`).
+Das dbt-Projekt liest `dm_pg.governance.*` als Quellen (`models/01_staging/_sources.yml`, var `dm_catalog`).
 
-### 6.2 dbt-Schichten
+### 6.2 dbt-Projekt: Ordnerkonvention und Schichten
 
-| Schicht | Modelle | Materialisierung |
-|---|---|---|
-| sample | `sample__*`: dieselben 8 Quelltabellen als Beispieldaten; nur mit `--vars '{use_sample_data: true}'` | table |
-| staging | `stg_dm__process_event` (**inkrementell, MERGE auf `event_id`, Überlappungsfenster `recorded_at` − 15 Min.**), `stg_dm__app_release`, `stg_dm__workflow_transition`, `stg_dm__process_catalog`, `stg_dm__process_model_activity` / `_transition`, `stg_dm__governance_rule` (jeweils aktuelle Modell-Version) | view bzw. incremental |
-| intermediate | `int_event_log`, `int_system_allowed_transitions`, `int_transition_classes`, `int_transitions`, `int_rule_violations`, `int_findings`, `int_case_conformance`, `int_system_conformance`, `int_rejected_attempts` | table |
-| marts | `mart_case_conformance`, `mart_findings`, `mart_findings_summary`, `mart_system_conformance`, `mart_rejected_attempts`, `mart_process_graph`, `mart_alert_critical_findings` | table |
-| seeds | `finding_severity` (Schwere, Maßnahme je Befund-Typ), `process_graph_layout` (Position je Aktivität) | Konfiguration des Data Products |
+Das Projekt folgt der Konvention des Auftraggebers für Data-Product-dbt-Projekte:
+
+| Ordner | Zweck | Modelle | Materialisierung, Zugriff |
+|---|---|---|---|
+| `models/01_staging/` | Aufbereitung der Quellen (1:1, Typen, aktuelle Modell-Version); `_sources.yml` | `stg_dm__process_event` (**inkrementell, MERGE auf `event_id`, Überlappungsfenster `recorded_at` − 15 Min.**), `stg_dm__app_release`, `stg_dm__workflow_transition`, `stg_dm__process_catalog`, `stg_dm__process_model_activity` / `_transition`, `stg_dm__governance_rule` | view bzw. incremental · `protected` |
+| `models/02_intermediate/` | Zwischenberechnungen und Muster | `int_event_log`, `int_system_allowed_transitions`, `int_transition_classes`, `int_transitions`, `int_rule_violations`, `int_findings`, `int_case_conformance`, `int_system_conformance`, `int_rejected_attempts` | table · `protected` |
+| `models/03_product/` | **ausschließlich** die Modelle des **Data Contracts**: konsumierbare Tabellen des Data Products | `mart_case_conformance`, `mart_findings`, `mart_findings_summary`, `mart_system_conformance`, `mart_rejected_attempts`, `mart_process_graph`, `mart_alert_critical_findings` | table · `public` · **erzwungener dbt-Contract** |
+| `sample_data/` (außerhalb von `models/`) | Beispieldaten anstelle der 8 Quelltabellen, nur mit `--vars '{use_sample_data: true}'` | `sample__*` | table |
+| `seeds/` | Konfiguration des Data Products | `finding_severity` (Schwere, Maßnahme je Befund-Typ), `process_graph_layout` (Position je Aktivität) | – |
+
+**Data Contract (`models/03_product/_product.yml`):**
+- Jedes Product-Modell hat eine explizite Spaltenliste (kein `SELECT *`).
+- Datentypen sind stabil (z. B. `decimal(5,1)` für Prozentwerte), jede Spalte ist beschrieben.
+- `contract: enforced` gilt: Weichen Name, Typ oder Spaltenanzahl ab, scheitert `dbt build`. Das ist
+  getestet, ein falscher Typ bricht den Build ab.
+- 114 Spalten in 7 Modellen. Diese Definition ist die Vorlage für die Data Contracts, die im Data
+  Manager registriert werden.
+- **Konsumenten lesen nur aus `03_product`.** Das gilt auch für Dashboards und den Alarm.
+  Staging- und Intermediate-Modelle sind kein Teil der Schnittstelle und dürfen sich ändern.
 
 Die Quelle wechselt das Makro `dm_source()`: mit Beispieldaten `ref('sample__…')`, sonst
 `source('data_manager', …)`.

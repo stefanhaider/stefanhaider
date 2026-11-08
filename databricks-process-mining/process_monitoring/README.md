@@ -8,7 +8,7 @@ Catalog als Foreign Catalog eingebunden.
 
 ```
 dm_pg.governance.*  (Foreign Catalog, read-only)
-   └─ dbt: staging → intermediate → marts (mart_*)
+   └─ dbt: 01_staging → 02_intermediate → 03_product (Data Contract, mart_*)
         ├─ Dashboard "Data Manager – Prozess- & Governance-Monitoring" (3 Seiten)
         └─ Alarm-Task (kritische Befunde → E-Mail)
 Job process_monitoring_refresh: alle 15 Minuten  dbt build → Alarm
@@ -22,7 +22,7 @@ Job process_monitoring_refresh: alle 15 Minuten  dbt build → Alarm
 | `resources/process_monitoring.job.yml` | Job: `dbt_task` (dbt-databricks auf dem SQL Warehouse) und Alarm-SQL-Task |
 | `resources/process_monitoring.dashboard.yml` | Dashboard-Ressource |
 | `setup/01_unity_catalog_connection.sql` | **einmalig (Admin):** Connection auf PostgreSQL, Foreign Catalog `dm_pg`, Grants, Vollständigkeitskontrolle |
-| `dbt/` | Data Product: `models/{sample,staging,intermediate,marts}`, `seeds/` (Schweregrade, Graph-Layout), `tests/` (Abnahmewerte), `macros/` |
+| `dbt/` | Data Product: `models/01_staging`, `02_intermediate`, `03_product` (**nur** Data-Contract-Modelle, erzwungene Contracts), `sample_data/` (Beispieldaten), `seeds/`, `tests/`, `macros/`; Konventionen in [`dbt/README.md`](dbt/README.md) |
 | `src/dashboards/process_monitoring.lvdash.json` | Dashboard-Entwurf (nach Einrichtung durch Export ersetzen) |
 | `src/dashboards/process_graph.vl.json` | Vega-Lite-Spezifikation des Soll-Ist-Prozessgraphen (Custom Viz) |
 | `src/sql/alert_critical_findings.sql` | Alarm-Task |

@@ -1,4 +1,4 @@
--- Kritische Befunde, die NEU sind (erstes Auftreten in den letzten new_days) oder in den letzten 7 Tagen
+-- Data Contract: kritische Befunde, die NEU sind (erstes Auftreten in den letzten new_days) oder in den letzten 7 Tagen
 -- (bezogen auf den Vorgangsstart) aufgetreten sind. Grundlage für den Alarm-Task im Job.
 -- Bei Live-Daten kann ref_ts durch current_timestamp() ersetzt werden.
 WITH f AS (

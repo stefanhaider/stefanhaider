@@ -28,7 +28,7 @@ die echten Umgebungen zu bringen und auf echte Daten umzustellen, nicht ihn neu 
 3. [`EVENT_STANDARD.md`](EVENT_STANDARD.md): Event-Format, Einbindung in den Data Manager
 4. `mockup/dashboard.html` im Browser (offline): **Zielbild** der drei Dashboard-Seiten
 5. `data_manager/README.md` und `data_manager/frontend/README.md`
-6. `process_monitoring/README.md`, danach `dbt/models/` (staging → intermediate → marts)
+6. `process_monitoring/README.md` und `process_monitoring/dbt/README.md` (Konventionen), danach `dbt/models/` (01_staging → 02_intermediate → 03_product)
 
 ## 3. Leitplanken (nicht verhandelbar)
 
@@ -37,6 +37,10 @@ die echten Umgebungen zu bringen und auf echte Daten umzustellen, nicht ihn neu 
   Catalog. Kein Aufruf von Data-Manager-APIs aus Databricks und kein Schreiben in den Data Manager.
 * **Data Product = dbt-Projekt.** Alle Datenmodelle für Dashboards sind dbt-Modelle in
   `process_monitoring/dbt/`, inklusive Tests. Keine handgepflegten Views oder Tabellen daneben.
+* **dbt-Ordnerkonvention:** `models/01_staging` (Aufbereitung der Quellen), `models/02_intermediate`
+  (Zwischenberechnungen, Muster), `models/03_product` (**ausschließlich** Modelle des Data Contracts:
+  `access: public`, erzwungener dbt-Contract in `_product.yml`). Konsumenten, also auch die Dashboards,
+  lesen nur aus `03_product`. Beispieldaten liegen außerhalb von `models/` in `sample_data/`.
 * **Alles in Databricks als Bundle:** Jobs, Dashboard und Konfiguration sind in
   `process_monitoring/` versioniert und werden per `databricks bundle deploy` ausgerollt.
   Ausnahme: das einmalige Unity-Catalog-Setup (Connection), das Admin-Rechte braucht.
@@ -142,6 +146,6 @@ Am Ende jedes Arbeitspakets kurz berichten:
 | Frontend | `data_manager/frontend/` |
 | CI | `data_manager/ci/` |
 | Databricks-Bundle | `process_monitoring/databricks.yml`, `resources/`, `setup/`, `src/` |
-| Data Product (dbt) | `process_monitoring/dbt/` (`models/{sample,staging,intermediate,marts}`, `seeds/`, `tests/`, `macros/`) |
+| Data Product (dbt) | `process_monitoring/dbt/` (`models/01_staging`, `02_intermediate`, `03_product` = Data Contract; `sample_data/`, `seeds/`, `tests/`, `macros/`) |
 | Zielbild | `mockup/` |
 | Prüfung | `tools/verify_all.sh`, `run_dbt_local.sh`, `export_graph_json.py`, `check_vega_spec.mjs` |

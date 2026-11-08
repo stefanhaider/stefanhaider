@@ -1,4 +1,4 @@
--- Ein Datensatz je Befund, Prozess und domain_scope ('Alle' oder eine Domäne).
+-- Data Contract: ein Datensatz je Befund, Prozess und domain_scope ('Alle' oder eine Domäne).
 -- Beantwortet: Lässt die Applikation das (noch) zu? Wer muss handeln?
 --   cases_last_4w / pct_last_4w : betroffene unter den in den letzten recent_days gestarteten Vorgängen
 --   status : 'neu' (erstes Auftreten in den letzten new_days) | 'tritt weiterhin auf' | 'nicht mehr aufgetreten'
@@ -28,9 +28,9 @@ f AS (
 SELECT
   f.process, f.domain_scope, f.finding_type, f.finding, f.severity, f.severity_rank,
   COUNT(DISTINCT f.case_id)                                                       AS cases,
-  ROUND(COUNT(DISTINCT f.case_id) * 100.0 / r.all_cases, 1)                       AS pct_of_cases,
+  CAST(ROUND(COUNT(DISTINCT f.case_id) * 100.0 / r.all_cases, 1) AS DECIMAL(5, 1)) AS pct_of_cases,
   COUNT(DISTINCT IF(f.case_start >= r.recent_from, f.case_id, NULL))              AS cases_last_4w,
-  ROUND(COUNT(DISTINCT IF(f.case_start >= r.recent_from, f.case_id, NULL)) * 100.0 / r.recent_cases, 1) AS pct_last_4w,
+  CAST(ROUND(COUNT(DISTINCT IF(f.case_start >= r.recent_from, f.case_id, NULL)) * 100.0 / r.recent_cases, 1) AS DECIMAL(5, 1)) AS pct_last_4w,
   CAST(MIN(f.event_ts) AS DATE)                                                   AS first_seen,
   CAST(MAX(f.event_ts) AS DATE)                                                   AS last_seen,
   CASE

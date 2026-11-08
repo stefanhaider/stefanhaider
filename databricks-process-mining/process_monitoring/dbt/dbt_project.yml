@@ -1,12 +1,16 @@
 # Data Product "process_monitoring" – Prozess- und Governance-Monitoring des Data Managers.
 # Quelle: PostgreSQL des Data Managers, eingebunden per Unity Catalog (Foreign Catalog, var dm_catalog).
-# Ergebnis: marts.* für die AI/BI-Dashboards und den Alarm (siehe ../resources/).
+# Ergebnis: models/03_product = Data Contract (Dashboards, Alarm, weitere Konsumenten; siehe ../resources/).
 name: process_monitoring
 version: "1.0.0"
 config-version: 2
 profile: process_monitoring
 
-model-paths: ["models"]
+# models/01_staging      Aufbereitung der Quellen (Data Manager, 1:1)
+# models/02_intermediate Zwischenberechnungen und Muster
+# models/03_product      AUSSCHLIESSLICH die Modelle des Data Contracts (konsumierbar, access: public)
+# sample_data/           Beispieldaten anstelle der Quellen – nur mit use_sample_data (Dev, Abnahmetests)
+model-paths: ["models", "sample_data"]
 seed-paths: ["seeds"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
@@ -22,16 +26,17 @@ vars:
 models:
   process_monitoring:
     +file_format: delta
-    sample:
-      +materialized: table
-      +enabled: "{{ var('use_sample_data') | as_bool }}"
-      +tags: ["sample"]
-    staging:
+    "01_staging":
       +materialized: view
-    intermediate:
+      +access: protected
+    "02_intermediate":
       +materialized: table
-    marts:
+      +access: protected
+    "03_product":
       +materialized: table
+      +access: public          # Data Contract des Data Products
+      +contract:
+        enforced: true         # Schema laut _product.yml wird bei jedem Build erzwungen
 
 seeds:
   process_monitoring:

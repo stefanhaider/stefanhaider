@@ -1,3 +1,4 @@
+{{ config(enabled = var('use_sample_data') | as_bool, materialized = 'table', tags = ['sample']) }}
 SELECT * FROM VALUES
   ('2026.1', 'Access Request', 'AR-SOD-01', 'sod', 'Beantragt',        'Prüfung Data Owner',   CAST(NULL AS INT), 'Antragsteller genehmigt eigenen Antrag',       'kritisch'),
   ('2026.1', 'Data Contract',  'DC-SOD-01', 'sod', 'Entwurf erstellt', 'Review Data Owner',    NULL,              'Autor reviewt eigenen Data Contract',          'kritisch'),

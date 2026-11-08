@@ -1,3 +1,4 @@
+{{ config(enabled = var('use_sample_data') | as_bool, materialized = 'table', tags = ['sample']) }}
 -- Beispieldaten im Format von governance.process_event (nur mit use_sample_data = true).
 -- Drei Prozesse des Data Managers mit eingebauten Governance-Lücken – Details und erwartete
 -- Ergebnisse: IMPLEMENTATION_SPEC.md, Abschnitt 10 (geprüft durch tests/acceptance_*.sql).
