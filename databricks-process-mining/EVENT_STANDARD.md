@@ -44,7 +44,7 @@
 | `event_ts` | TIMESTAMP (UTC, ms) | ja | Zeitpunkt der Statusänderung |
 | `reason` | STRING | nein | Begründung, z. B. Genehmigungskommentar oder Abweisungsgrund |
 
-Beispiele: [`examples/events_example.jsonl`](examples/events_example.jsonl).
+Beispiele: [`data_manager/examples/events_example.jsonl`](data_manager/examples/events_example.jsonl).
 
 ## 3. Benennung der Aktivitäten
 
@@ -83,7 +83,7 @@ Beispiele: [`examples/events_example.jsonl`](examples/events_example.jsonl).
 
 * `▶ Start` = Anlage, `■ Ende` = Abschluss (Übergänge von Ende-Status nach `■ Ende` mit exportieren)
 * optional `channels`: Übergang nur über bestimmte Kanäle erlaubt
-* Vollständiges Beispiel: [`config/workflow_definition.json`](config/workflow_definition.json)
+* Vollständiges Beispiel: [`data_manager/governance/workflow_definition.json`](data_manager/governance/workflow_definition.json)
 
 ## 6. Datenfluss
 
@@ -91,22 +91,22 @@ Beispiele: [`examples/events_example.jsonl`](examples/events_example.jsonl).
 Data Manager ── transition() ──► PostgreSQL: Status + governance.process_event (1 Transaktion, append-only)
                                         │  Unity Catalog: Connection + Foreign Catalog dm_pg
                                         │  (read-only User, möglichst Read-Replica)
-                                        ▼  12_federation_ingest.sql: MERGE alle 5–15 Min.
-                     main.data_manager_pm.process_event_bronze  (Delta, Historie)
+                                        ▼  Databricks Asset Bundle process_monitoring
+                     dbt (Data Product): stg_dm__process_event (inkrementell, MERGE alle 15 Min.)
                                         ▼
-                     main.data_manager_pm.event_log  (View, Spalten wie oben)
+                     int_* → mart_*  → Dashboard, Alarm
                                         │
-                     Views 03_views.sql ─► Dashboard, SQL Alerts
+                     
 
 Build/Release ── dm-export-workflow ──► workflow_definition.json ──► dm-check-workflow gegen governance_model.json
-                                                    └──► 11_load_config_from_json.sql (Historie)
+Deploy        ── dm-sync-governance ──► governance.app_release / workflow_transition / process_model_* / governance_rule
 ```
 
 ## 7. Umsetzung in Python: Paket `datamanager_governance`
 
 Der Data Manager ist in Python geschrieben. Deshalb liegt die Umsetzung als installierbares Paket
-in [`python/`](python) vor (`pip install ./python`). Der Kern braucht nur die Standardbibliothek,
-für PostgreSQL wird `psycopg` 3 verwendet. Es gibt 15 Tests, davon 5 gegen echtes PostgreSQL 16
+in [`data_manager/python/`](data_manager/python) vor (`pip install ./python`). Der Kern braucht nur die Standardbibliothek,
+für PostgreSQL wird `psycopg` 3 verwendet. Es gibt 17 Tests, davon 6 gegen echtes PostgreSQL 16
 (laufen mit `DM_TEST_PG_DSN`).
 
 | Modul | Inhalt |
@@ -114,10 +114,11 @@ für PostgreSQL wird `psycopg` 3 verwendet. Es gibt 15 Tests, davon 5 gegen echt
 | `events.py` | `ProcessEvent` (Dataclass) mit Validierung der Pflichtfelder, Kanäle und Event-Typen; `to_json()` |
 | `state_machine.py` | `Workflow` (erlaubte Übergänge inkl. Kanal-Einschränkung, Endzustände), `StateMachine.transition()`: einziger Weg für Statuswechsel, schreibt das Event in `process_event` (gleiche Transaktion), wirft `TransitionRejected` |
 | `event_store.py` | `PostgresEventStore` (psycopg) bzw. `SqliteEventStore` (Tests) für `process_event`, `autonomous_sink()` für abgewiesene Versuche in eigener Transaktion, Beispiele für SQLAlchemy und Django |
-| `python/sql/postgres/001_process_event.sql` | PostgreSQL-DDL: Tabelle mit Spalten nach Standard, Prüfung auf UTF-8, **Append-only-Trigger** (UPDATE/DELETE/TRUNCATE verboten), Rollen `dm_event_writer` (nur INSERT) und `dm_event_reader` (nur SELECT, für Databricks) |
+| `data_manager/python/sql/postgres/001_process_event.sql` | PostgreSQL-DDL: Tabelle mit Spalten nach Standard, Prüfung auf UTF-8, **Append-only-Trigger** (UPDATE/DELETE/TRUNCATE verboten), Rollen `dm_event_writer` (nur INSERT) und `dm_event_reader` (nur SELECT, für Databricks) |
 | `workflows.py` | **die Status-Maschinen des Data Managers** (Access Request, Data Contract, Data Product): Single Source of Truth der System-Ebene |
 | `export.py` | `dm-export-workflow`: erzeugt `workflow_definition.json` |
 | `conformance.py` | `dm-check-workflow`: CI-Check gegen den Soll-Prozess |
+| `governance_sync.py` | `dm-sync-governance`: schreibt beim Deploy Releases, Status-Maschine des aktuellen Release, Soll-Modell (versioniert, unveränderlich), Regeln und Owner nach `governance.*` (DDL: `002_governance_model.sql`) |
 
 **Einbindung:**
 
@@ -144,7 +145,10 @@ with session.begin():                                    # Django: with transact
   `"migration"` und einem Service-Account als `actor`.
 * `trace_id` aus OpenTelemetry übernehmen. Dann lässt sich jedes Event mit dem Application
   Monitoring verknüpfen.
-* Lauffähige Demo: [`examples/event_writer_example.py`](examples/event_writer_example.py).
+* **Vue-Frontend:** Die UI zeigt nur Aktionen aus `StateMachine.allowed_next()`, behandelt HTTP 409
+  bei Abweisung und schickt `traceparent` mit. Bausteine und Regeln:
+  [`data_manager/frontend/`](data_manager/frontend).
+* Lauffähige Demo: [`data_manager/examples/event_writer_example.py`](data_manager/examples/event_writer_example.py).
 
 ## 8. Checkliste für Entwickler
 

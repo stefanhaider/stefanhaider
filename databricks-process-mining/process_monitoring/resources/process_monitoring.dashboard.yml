@@ -1,0 +1,12 @@
+resources:
+  dashboards:
+    process_monitoring:
+      display_name: Data Manager – Prozess- & Governance-Monitoring
+      file_path: ../src/dashboards/process_monitoring.lvdash.json
+      warehouse_id: ${var.warehouse_id}
+      # Datasets im Dashboard verwenden unqualifizierte Tabellennamen (mart_*). Katalog/Schema je Target:
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.schema}
+      # Der Soll-Ist-Prozessgraph ist eine Custom Viz (process_graph.vl.json). Nach der ersten
+      # Einrichtung im Workspace das Dashboard exportieren und diese Datei damit ersetzen:
+      #   databricks bundle generate dashboard --existing-id <id> -t dev

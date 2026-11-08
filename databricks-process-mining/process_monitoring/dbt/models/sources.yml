@@ -1,0 +1,20 @@
+version: 2
+sources:
+  - name: data_manager
+    description: >
+      PostgreSQL des Data Managers, per Unity Catalog als Foreign Catalog eingebunden
+      (../setup/01_unity_catalog_connection.sql). Read-only (Rolle dm_event_reader).
+      Befüllt vom Data Manager: process_event (StateMachine.transition), Rest per dm-sync-governance.
+    database: "{{ var('dm_catalog') if target.type == 'databricks' else none }}"
+    schema: "{{ var('dm_schema') }}"
+    tables:
+      - name: process_event
+        description: Prozess-Footprints (append-only), EVENT_STANDARD.md
+      - name: app_release
+      - name: workflow_transition
+        description: Status-Maschine je Release (System-Ebene)
+      - name: process_catalog
+      - name: process_model_version
+      - name: process_model_activity
+      - name: process_model_transition
+      - name: governance_rule

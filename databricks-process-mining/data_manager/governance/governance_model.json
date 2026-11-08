@@ -1,0 +1,391 @@
+{
+  "model_version": "2026.1",
+  "approved_by": "Data Governance Office",
+  "approved_at": "2026-01-01",
+  "description": "Soll-Prozesse des Data Managers. Eigentum: Governance (CODEOWNERS). Nicht aus dem Code erzeugen.",
+  "processes": [
+    {
+      "process": "Access Request",
+      "owner": "Data Security Office",
+      "description": "Zugriff auf Datenprodukte beantragen, prüfen und vergeben",
+      "activities": [
+        {
+          "name": "▶ Start",
+          "step_order": 0,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Beantragt",
+          "step_order": 1,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Prüfung Data Owner",
+          "step_order": 2,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Prüfung Security",
+          "step_order": 3,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Berechtigung erteilt",
+          "step_order": 4,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Abgelehnt",
+          "step_order": 90,
+          "is_terminal": true,
+          "is_control": false
+        },
+        {
+          "name": "■ Ende",
+          "step_order": 99,
+          "is_terminal": true,
+          "is_control": false
+        }
+      ],
+      "allowed_transitions": [
+        [
+          "▶ Start",
+          "Beantragt"
+        ],
+        [
+          "Beantragt",
+          "Prüfung Data Owner"
+        ],
+        [
+          "Prüfung Data Owner",
+          "Prüfung Security"
+        ],
+        [
+          "Prüfung Data Owner",
+          "Abgelehnt"
+        ],
+        [
+          "Prüfung Security",
+          "Berechtigung erteilt"
+        ],
+        [
+          "Prüfung Security",
+          "Abgelehnt"
+        ],
+        [
+          "Berechtigung erteilt",
+          "■ Ende"
+        ],
+        [
+          "Abgelehnt",
+          "■ Ende"
+        ]
+      ],
+      "rules": [
+        {
+          "rule_id": "AR-SOD-01",
+          "rule_type": "sod",
+          "activity_a": "Beantragt",
+          "activity_b": "Prüfung Data Owner",
+          "max_hours": null,
+          "description": "Antragsteller genehmigt eigenen Antrag",
+          "severity": "kritisch"
+        },
+        {
+          "rule_id": "AR-SLA-01",
+          "rule_type": "sla",
+          "activity_a": "Beantragt",
+          "activity_b": "Berechtigung erteilt",
+          "max_hours": 120,
+          "description": "Zugriff innerhalb von 5 Tagen",
+          "severity": "mittel"
+        }
+      ]
+    },
+    {
+      "process": "Data Contract",
+      "owner": "Data Architecture",
+      "description": "Data Contracts erstellen, prüfen, freigeben und versionieren",
+      "activities": [
+        {
+          "name": "▶ Start",
+          "step_order": 0,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Entwurf erstellt",
+          "step_order": 1,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Schema validiert",
+          "step_order": 2,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Review Data Owner",
+          "step_order": 3,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Freigegeben",
+          "step_order": 4,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Aktiv",
+          "step_order": 5,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Änderung beantragt",
+          "step_order": 6,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Schema erneut validiert",
+          "step_order": 7,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Review Änderung",
+          "step_order": 8,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Neue Version aktiv",
+          "step_order": 9,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Verworfen",
+          "step_order": 90,
+          "is_terminal": true,
+          "is_control": false
+        },
+        {
+          "name": "■ Ende",
+          "step_order": 99,
+          "is_terminal": true,
+          "is_control": false
+        }
+      ],
+      "allowed_transitions": [
+        [
+          "Änderung beantragt",
+          "Schema erneut validiert"
+        ],
+        [
+          "Schema erneut validiert",
+          "Review Änderung"
+        ],
+        [
+          "Review Änderung",
+          "Neue Version aktiv"
+        ],
+        [
+          "Review Änderung",
+          "Verworfen"
+        ],
+        [
+          "Neue Version aktiv",
+          "■ Ende"
+        ],
+        [
+          "Verworfen",
+          "■ Ende"
+        ],
+        [
+          "▶ Start",
+          "Entwurf erstellt"
+        ],
+        [
+          "Entwurf erstellt",
+          "Schema validiert"
+        ],
+        [
+          "Schema validiert",
+          "Review Data Owner"
+        ],
+        [
+          "Review Data Owner",
+          "Freigegeben"
+        ],
+        [
+          "Review Data Owner",
+          "Verworfen"
+        ],
+        [
+          "Freigegeben",
+          "Aktiv"
+        ],
+        [
+          "Aktiv",
+          "■ Ende"
+        ],
+        [
+          "Aktiv",
+          "Änderung beantragt"
+        ]
+      ],
+      "rules": [
+        {
+          "rule_id": "DC-SOD-01",
+          "rule_type": "sod",
+          "activity_a": "Entwurf erstellt",
+          "activity_b": "Review Data Owner",
+          "max_hours": null,
+          "description": "Autor reviewt eigenen Data Contract",
+          "severity": "kritisch"
+        },
+        {
+          "rule_id": "DC-SLA-01",
+          "rule_type": "sla",
+          "activity_a": "Entwurf erstellt",
+          "activity_b": "Freigegeben",
+          "max_hours": 168,
+          "description": "Freigabe innerhalb von 7 Tagen",
+          "severity": "mittel"
+        }
+      ]
+    },
+    {
+      "process": "Data Product",
+      "owner": "Data Product Management",
+      "description": "Datenprodukte anlegen, prüfen, freigeben und veröffentlichen",
+      "activities": [
+        {
+          "name": "▶ Start",
+          "step_order": 0,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Angelegt",
+          "step_order": 1,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Metadaten erfasst",
+          "step_order": 2,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Data Contract verknüpft",
+          "step_order": 3,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Qualitätsprüfung",
+          "step_order": 4,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Freigabe Data Owner",
+          "step_order": 5,
+          "is_terminal": false,
+          "is_control": true
+        },
+        {
+          "name": "Veröffentlicht",
+          "step_order": 6,
+          "is_terminal": false,
+          "is_control": false
+        },
+        {
+          "name": "Abgelehnt",
+          "step_order": 90,
+          "is_terminal": true,
+          "is_control": false
+        },
+        {
+          "name": "■ Ende",
+          "step_order": 99,
+          "is_terminal": true,
+          "is_control": false
+        }
+      ],
+      "allowed_transitions": [
+        [
+          "▶ Start",
+          "Angelegt"
+        ],
+        [
+          "Angelegt",
+          "Metadaten erfasst"
+        ],
+        [
+          "Metadaten erfasst",
+          "Data Contract verknüpft"
+        ],
+        [
+          "Data Contract verknüpft",
+          "Qualitätsprüfung"
+        ],
+        [
+          "Qualitätsprüfung",
+          "Metadaten erfasst"
+        ],
+        [
+          "Qualitätsprüfung",
+          "Freigabe Data Owner"
+        ],
+        [
+          "Freigabe Data Owner",
+          "Veröffentlicht"
+        ],
+        [
+          "Freigabe Data Owner",
+          "Abgelehnt"
+        ],
+        [
+          "Veröffentlicht",
+          "■ Ende"
+        ],
+        [
+          "Abgelehnt",
+          "■ Ende"
+        ]
+      ],
+      "rules": [
+        {
+          "rule_id": "DP-SOD-01",
+          "rule_type": "sod",
+          "activity_a": "Angelegt",
+          "activity_b": "Freigabe Data Owner",
+          "max_hours": null,
+          "description": "Ersteller gibt eigenes Datenprodukt frei",
+          "severity": "kritisch"
+        },
+        {
+          "rule_id": "DP-SLA-01",
+          "rule_type": "sla",
+          "activity_a": "Angelegt",
+          "activity_b": "Veröffentlicht",
+          "max_hours": 240,
+          "description": "Veröffentlichung innerhalb von 10 Tagen",
+          "severity": "mittel"
+        }
+      ]
+    }
+  ]
+}

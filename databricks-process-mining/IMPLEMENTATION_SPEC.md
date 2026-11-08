@@ -1,631 +1,448 @@
-# Implementierungsauftrag: Prozess- und Governance-Monitoring für den „Data Manager“
+# Spezifikation: Prozess- und Governance-Monitoring für den „Data Manager“
 
-> Vollständige Übergabe an einen implementierenden Agenten oder ein Team. Das Dokument ist
-> eigenständig lesbar. Ein funktionierender Referenzstand (SQL, Vega-Lite, HTML-Mockup) liegt im
-> selben Ordner. Wo Dokument und Referenzcode sich widersprechen, gilt dieses Dokument.
+> Vollständige fachliche und technische Spezifikation. Einstieg für den implementierenden Agenten
+> ist [`AGENTS.md`](AGENTS.md); bei Widersprüchen gilt dieses Dokument.
 
 ---
 
 ## 1. Kontext und Ziel
 
-Das Unternehmen betreibt eine eigene Data-Governance- bzw. Data-Mesh-Applikation, den
-**Data Manager**. Er verwaltet unter anderem:
+Der **Data Manager** ist die selbst entwickelte Data-Governance- bzw. Data-Mesh-Applikation des
+Auftraggebers:
+- **Backend:** Python,
+- **Frontend:** Vue.js,
+- **Datenbank:** PostgreSQL.
 
-- den **Datenkatalog**,
-- **Data Contracts** und **Data Products**,
-- **Applikationen**,
-- **Access Requests** und **Change Approvals**,
-- **kanonische Datenmodelle**.
+Er verwaltet Datenkatalog, Data Contracts, Data Products, Applikationen, Access Requests, Change
+Approvals und kanonische Datenmodelle. Die Prozesse dahinter sind definiert und implementiert.
 
-Die Prozesse dahinter sind definiert und in der Applikation implementiert.
-
-**Ziel:** Mit Process Mining messen, ob die **Ist-Prozesse den definierten Soll-Prozessen
-entsprechen**, und **informiert werden**, sobald Prozesslücken oder Governance-Brüche sichtbar
-werden, um gezielt handeln zu können. Im Kern sind es drei Fragen:
+**Ziel:** messen, ob die Ist-Prozesse den Soll-Prozessen entsprechen, und **informiert werden**, wenn
+Prozesslücken oder Governance-Brüche sichtbar werden. Vier Fragen:
 
 1. **Werden die Soll-Prozesse eingehalten?** Konformitätsrate je Prozess und Verlauf.
-2. **Lässt der Data Manager Wege zu, die er nicht zulassen sollte?** Zum Beispiel eine
-   Berechtigung ohne Security-Prüfung, ein Datenprodukt ohne Qualitätsprüfung, eine
-   Contract-Änderung ohne Review. Tritt das **noch** auf, ist es **neu**, oder ist es behoben?
-3. **Werden Governance-Regeln verletzt, die sich nicht am Pfad zeigen?** Funktionstrennung
-   (Antragsteller ≠ Genehmiger) und Fristen.
-4. **Passt das System zum Prozess (System-Prozess-Konformität)?** Vergleich zwischen Soll-Prozess
-   (Governance), Status-Maschine des Data Managers (System) und Events (Ist). Gesucht sind
-   - Übergänge, die das System erlaubt, obwohl das Soll sie nicht vorsieht, auch **latente**,
-     die noch niemand genutzt hat,
-   - Soll-Schritte, die das System nicht anbietet,
-   - Übergänge, die **am Workflow vorbei** passieren (Admin-API, Batch).
+2. **Lässt der Data Manager Wege zu, die er nicht zulassen sollte?** Umgangene Kontrollen. Ist der
+   Befund **neu**, tritt er **weiterhin auf**, oder ist er **behoben**?
+3. **Werden Governance-Regeln verletzt?** Funktionstrennung, Fristen.
+4. **Passt die Status-Maschine zum Soll-Prozess (System-Prozess-Konformität)?** Auch latente Lücken,
+   Umgehungen am Workflow vorbei und als CI-Check vor jedem Release.
 
-   Der Abgleich zwischen Soll und System läuft zusätzlich als **CI-Check vor jedem Release**.
-
-**Wichtig:** Der Data Manager wird vom Auftraggeber **selbst entwickelt**. Events werden deshalb
-nicht aus technischen Logs rekonstruiert, sondern **an der Quelle nach einem Standard erzeugt**
-([`EVENT_STANDARD.md`](EVENT_STANDARD.md)), und die Status-Maschine ist als JSON exportierbar.
-
-Fachlich ist das **Conformance Checking** auf Basis von Directly-Follows-Beziehungen
-(A → B direkt nacheinander im selben Vorgang), ergänzt um Regelprüfungen.
-**Kein** generisches Process-Mining-Tool, **keine** Petri-Netze oder Token-Replay.
+Fachlich ist das Conformance Checking auf Directly-Follows-Beziehungen plus Regelprüfungen. Es ist
+**kein** generisches Process-Mining-Tool.
 
 ### Rahmenbedingungen (vom Auftraggeber festgelegt)
 
-* **Plattform:** Databricks. Delta-Tabellen, Views, SQL Warehouse, **AI/BI Dashboards** und
-  SQL Alerts.
-* **Keine Databricks App:** zu teuer.
-* **Keine Heatmap oder Übergangsmatrix, kein Sankey** im Dashboard. Stattdessen ein
-  **Prozessgraph** im klassischen Process-Mining-Stil: Start/Ende-Kreise, Kästen mit Anzahl,
-  Pfeile mit Zahl, Liniendicke nach Häufigkeit, Verlauf von oben nach unten.
-* Sprache **Deutsch**, Zahlenformat deutsch (1.000; 74,5 %).
-* **Erweiterbar** auf weitere Data-Manager-Prozesse (Change Approval, kanonische Datenmodelle,
-  Applikations-Onboarding, …) **nur über Konfiguration**, ohne Codeänderung.
+* **Zwei getrennte Teile:**
+  1. **Data Manager** (Applikation): erzeugt **alle Daten**, die das Monitoring braucht, in seiner
+     PostgreSQL-Datenbank.
+  2. **Databricks-Projekt `process_monitoring`**: ein **Databricks Asset Bundle**, das **komplett
+     unabhängig** vom Data Manager läuft. Es enthält das Data Product, Dashboards und Jobs. Die
+     einzige Verbindung sind die Daten, per **Unity Catalog** (Foreign Catalog, Lakehouse
+     Federation) eingebunden.
+* **Data Product = dbt-Projekt.** Die Datenmodelle für die Dashboards sind dbt-Modelle.
+* **Keine Databricks App**, **keine Heatmap oder Übergangsmatrix**, **kein Sankey.** Stattdessen ein
+  Prozessgraph im Process-Mining-Stil (Custom Viz mit Vega-Lite).
+* Sprache Deutsch, Zahlenformat deutsch.
+* Erweiterbar auf weitere Prozesse (Change Approval, kanonische Datenmodelle, …) **nur über Daten
+  bzw. Konfiguration**.
 
 ---
 
-## 2. Referenzstand im Repository
+## 2. Architektur
 
-Repository `stefanhaider/stefanhaider`, Branch `ccr-f1f6041b-rq5je9`, Ordner
-`databricks-process-mining/`:
-
-| Datei | Rolle |
-|---|---|
-| `01_sample_event_log.sql` | Synthetisches Eventlog: 1.000 Vorgänge in 3 Prozessen, mit eingebauten Governance-Lücken. Nur für Demo und Abnahme |
-| `02_process_model.sql` | **Konfiguration:** Prozesse, Soll-Prozesse, Kontrollschritte, Regeln, Schweregrade, Graph-Layout |
-| `03_views.sql` | **Gesamte Auswertungslogik** als 4 Views |
-| `04_ds_process_graph.sql` | Dataset Prozessgraph (inkl. Layout-Berechnung), Parameter `:process`, `:domain` |
-| `05_ds_case_conformance.sql` | Dataset: ein Datensatz je Vorgang |
-| `06_ds_findings.sql` | Dataset: jedes Befund-Vorkommen |
-| `07_ds_findings_summary.sql` | Dataset: je Befund Status „neu / tritt weiterhin auf / nicht mehr aufgetreten“, Parameter `:domain` |
-| `08_alert_critical_findings.sql` | Abfrage für einen SQL Alert auf neue bzw. aktuelle kritische Befunde |
-| `09_ds_system_conformance.sql` | Dataset: Soll · System · Ist je Übergang mit Kategorie und Schwere |
-| `10_ds_rejected_attempts.sql` | Dataset: vom System abgewiesene Versuche |
-| `11_load_config_from_json.sql` | Produktion: Soll-Modell und Status-Maschine aus JSON laden (Status-Maschine mit Historie). Databricks-spezifisch, **lokal nicht getestet** |
-| `EVENT_STANDARD.md` | **Verbindliches Event-Format** für den Data Manager, Export der Status-Maschine, Datenfluss, Entwickler-Checkliste |
-| `config/governance_model.json` | Soll-Prozess als JSON (gehört der Governance) |
-| `config/workflow_definition.json` | Export der Status-Maschine, Release 2.5, **erzeugt aus `python/…/workflows.py`** (gehört dem Data Manager) |
-| `python/` | **Python-Paket `datamanager_governance`** für den Data Manager: Event-Modell, Status-Maschine (`workflows.py` = System-Ebene), Speicherung in `process_event`, `dm-export-workflow`, `dm-check-workflow`; 15 pytest-Tests (5 davon gegen PostgreSQL) |
-| `python/sql/postgres/001_process_event.sql` | PostgreSQL-DDL für `governance.process_event`: append-only per Trigger, Rollen für App (INSERT) und Databricks (SELECT), UTF-8-Prüfung. **Gegen PostgreSQL 16 getestet** |
-| `12_federation_ingest.sql` | Produktion: UC-Connection + Foreign Catalog auf PostgreSQL, inkrementelles `MERGE` (Überlappungsfenster 15 Min.) nach `process_event_bronze`, View `event_log`, Vollständigkeitskontrolle. Databricks-spezifisch, **lokal nicht getestet** (Kopierlogik in `test_postgres.py` nachgestellt) |
-| `ci/check_workflow_conformance.py` | Wrapper für den CI-Check ohne installiertes Paket; Exit-Code 1 bei offenen kritischen Befunden |
-| `ci/accepted_deviations.json` | Genehmigte Ausnahmen (Begründung, Genehmiger, Ablaufdatum) |
-| `ci/github-actions-example.yml` | Beispiel-Pipeline |
-| `examples/event_writer_example.py` | Lauffähige Demo des Pakets: Statuswechsel, abgewiesener Versuch, Export |
-| `examples/events_example.jsonl` | Beispiel-Events nach Standard |
-| `process_graph.vl.json` | Vega-Lite-Spezifikation des Prozessgraphen (Custom Viz) |
-| `process_mining.lvdash.json` | Entwurf der Dashboard-Exportdatei (3 Seiten). **Ungetestet**, Format undokumentiert |
-| `dashboard.html` | Interaktives Mockup = **Soll-Zustand der Oberfläche** (Seiten „Übersicht“, „Prozessdetail“, „System-Konformität“) |
-| `dashboard_preview.png`, `dashboard_detail_preview.png`, `dashboard_system_preview.png`, `process_graph_preview.png` | Screenshots des Soll-Zustands |
-
-Alle SQL-Dateien außer `11_…` und `12_…` wurden mit Apache Spark 4.0.1 lokal ausgeführt, die
-parametrisierten mit mehreren Werten. Das Python-Paket hat 10 grüne pytest-Tests. Der Export
-aus `workflows.py` ist identisch mit der in Spark getesteten System-Konfiguration (38 Übergänge).
-Der CI-Check und die Demo laufen. Die Spezifikation rendert in Vega-Lite 5.23 und 6.5 ohne Warnungen.
-**Nichts davon wurde in einem echten Databricks-Workspace getestet.** Das ist die Hauptaufgabe.
+```
+┌──────────────────────── Data Manager (Applikation) ───────────────────────┐
+│ Vue-Frontend ─► Python-Backend ─► StateMachine.transition()               │
+│                                       │ gleiche Transaktion               │
+│ PostgreSQL  governance.process_event  ◄┘ (append-only Footprints)         │
+│             governance.app_release / workflow_transition   ◄─ dm-sync-governance (Deploy)
+│             governance.process_catalog / process_model_* / governance_rule ◄─ governance_model.json
+│ CI: pytest · dm-export-workflow · dm-check-workflow (Status-Maschine vs. Soll)            │
+└───────────────────────────────────────┬───────────────────────────────────┘
+                                        │ Unity Catalog: Connection + Foreign Catalog dm_pg
+                                        │ (read-only User dm_event_reader, möglichst Read-Replica)
+┌───────────────────── Databricks Asset Bundle process_monitoring ──────────┐
+│ dbt-Projekt (Data Product):                                               │
+│   staging (stg_dm__*; process_event inkrementell per MERGE)               │
+│   intermediate (Klassifizierung, Historie der Status-Maschine, Befunde)   │
+│   marts (mart_*) ─► AI/BI Dashboard (3 Seiten, Custom Viz Prozessgraph)   │
+│ Job process_monitoring_refresh (alle 15 Min.): dbt build ─► Alarm-Task    │
+└───────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 3. Vor dem Start mit dem Auftraggeber klären
+## 3. Paketstruktur
 
-1. **Quelle der Events im Data Manager:** Wo liegt das Audit-, Workflow- oder Statushistorie-Log?
-   Tabelle oder Export, Aktualität (Streaming oder Batch). Welche Felder gibt es (siehe 4.1)?
-2. **Welche Prozesse zuerst?** Vorschlag: Access Request, Data Contract, Data Product.
-   Danach Change Approval und kanonische Datenmodelle.
-3. **Soll-Prozesse je Prozess:**
-   - Statusfolge,
-   - erlaubte Alternativen und Rücksprünge,
-   - zulässige Endzustände (z. B. Abgelehnt, Verworfen),
-   - **welche Schritte sind Kontrollen** (Genehmigung, Prüfung, Validierung)?
-4. **Governance-Regeln:** Funktionstrennung (welche Schritte nicht durch dieselbe Person?),
-   Fristen (von–bis, maximale Dauer). Gibt es Ausnahmen, z. B. technische Accounts oder
-   Notfallzugriffe?
-5. **Laufende Vorgänge:** Woran erkennt man „abgeschlossen“? Sonst erscheinen laufende Vorgänge
-   als „Kein gültiger Abschluss“, und Fristverletzungen offener Vorgänge fehlen.
-6. **Verantwortliche** je Prozess (Process Owner) und **Alarm-Empfänger** (E-Mail, Teams/Slack,
-   Ticket?).
-7. **Zielwerte:** Konformitätsziel je Prozess (im Mockup Beispiel 95 %), Zeitfenster für
-   „aktuell“ (4 Wochen) und „neu“ (8 Wochen).
-8. **Katalog und Schema** (Mockup: `main.data_manager_pm`), Berechtigungen. Das Eventlog enthält
-   Personenkennungen, daher Datenschutz und Zugriff auf das Dashboard klären.
-9. Ist **Custom Viz (Public Preview)** im Workspace verfügbar, und welche Vega-Lite-Version
-   läuft dort?
-10. **Technologie des Data Managers:** **Python mit PostgreSQL** (geklärt). Offen sind
-    Web-Framework (FastAPI, Django, Flask?), ORM (SQLAlchemy?) und CI-System. Davon hängt die
-    konkrete EventStore-Variante ab (siehe `event_store.py`). Außerdem: Gibt es ein Read-Replica,
-    und wie erreicht Databricks die Datenbank (Private Link, VPC-Peering)?
-11. **Wo liegt das Soll-Modell?** Empfehlung: `governance_model.json` in einem Governance-Repository
-    mit eigenen Freigaben (Process Owner). Der Data Manager liest es nur.
-
----
-
-## 4. Datenmodell
-
-### 4.1 Eventlog (Eingabe): `main.data_manager_pm.event_log`
-
-Eine Zeile pro Statuswechsel oder Aktion im Data Manager. **Empfehlung:** eine View auf das echte
-Audit- bzw. Workflow-Log, die diese Spalten liefert:
-
-| Spalte | Typ | Bedeutung | Typische Herkunft im Data Manager |
-|---|---|---|---|
-| `process` | STRING | Prozessname, muss `process_catalog.process` entsprechen | Objekttyp bzw. Workflow-Typ (Access Request, Data Contract, …) |
-| `case_id` | STRING | Vorgangs-ID | ID des Antrags, Contracts oder Produkts (bei Versionierung: ID + Version oder Änderungs-ID) |
-| `domain` | STRING | Filterdimension, z. B. Datendomäne | Domäne bzw. Owner-Team des Objekts |
-| `activity` | STRING | Name des Schritts bzw. Status | Neuer Status oder Aktion, auf Soll-Namen gemappt |
-| `actor` | STRING | ausführende Person bzw. technischer Account | User des Audit-Eintrags |
-| `event_ts` | TIMESTAMP | Zeitpunkt | Zeitstempel des Audit-Eintrags |
-| `step_no` | INT | Tie-Breaker bei gleichem Zeitstempel | Sequenz oder ID des Audit-Eintrags |
-| `event_type` | STRING | `transition` (Statuswechsel) oder `rejected` (vom System abgewiesener Versuch) | Event-Writer |
-| `from_activity` | STRING | Status vorher (bei `rejected` Pflicht) | Event-Writer |
-| `channel` | STRING | `ui`, `api`, `admin_api`, `batch`, `migration`, `system` | Event-Writer |
-| `app_version` | STRING | Release des Data Managers | Event-Writer |
-
-Vollständiger Standard inklusive `event_id`, `workflow_version`, `trace_id` und `reason`:
-[`EVENT_STANDARD.md`](EVENT_STANDARD.md). Die Views nutzen nur Events mit
-`event_type = 'transition'` als Statuswechsel.
-
-Wichtig: Gleiche fachliche Schritte müssen **denselben `activity`-Namen** haben wie im Soll-Modell.
-Das Mapping von technischen Statuscodes auf Namen gehört in die View.
-
-### 4.2 Konfiguration (`02_process_model.sql`): einzige Pflegestelle
-
-| Tabelle | Spalten | Zweck |
+| Pfad | Teil | Inhalt |
 |---|---|---|
-| `process_catalog` | process, owner, description | Prozesse und Verantwortliche |
-| `process_model_activities` | process, activity, step_order, is_terminal, is_control | Aktivitäten je Prozess. `step_order` = Soll-Reihenfolge. `is_terminal` = zulässiges Ende (z. B. Abgelehnt). **`is_control` = Kontrollschritt**: Umgehung gilt als kritisch. `'▶ Start'` (0) und `'■ Ende'` (99, terminal) müssen je Prozess vorhanden sein |
-| `process_model_transitions` | process, src, tgt | **Alle erlaubten** direkten Übergänge inkl. Start/Ende, erlaubter Rücksprünge (z. B. Qualitätsprüfung → Metadaten erfasst) und Alternativen. Alles andere ist ein Befund |
-| `governance_rules` | process, rule_id, rule_type, activity_a, activity_b, max_hours, description, severity | `sod`: a und b nicht durch dieselbe Person. `sla`: von a bis b höchstens `max_hours` |
-| `finding_severity` | finding_type, severity, severity_rank, recommended_action | Schweregrad (kritisch/hoch/mittel) und empfohlene Maßnahme je Befund-Typ |
-| `process_graph_layout` | process, activity, x, y | Position im Prozessgraphen (Raster 800 breit, y nach unten). Fehlende Aktivitäten kommen automatisch an x = 740 untereinander |
-| `app_releases` | version, released_at, notes | Releases des Data Managers (Zuordnung „seit Release X“, Markierungen in Trends) |
-| `system_allowed_transitions` | process, src, tgt, valid_from, valid_to, since_release, note | **System-Ebene:** von der Status-Maschine erlaubte Übergänge mit Gültigkeitszeitraum (`valid_to` NULL = aktuell). Zeiträume je Übergang dürfen sich nicht überlappen. In Produktion aus `workflow_definition.json` geladen (`11_…`) |
+| `data_manager/python/` | Data Manager | Paket `datamanager_governance`: `events.py`, `state_machine.py` (`transition`, `allowed_next`), `workflows.py` (**Status-Maschine = System-Ebene**, `RELEASES`), `event_store.py`, `export.py`, `conformance.py`, `governance_sync.py`; 17 pytest-Tests (6 gegen PostgreSQL) |
+| `data_manager/python/sql/postgres/001_process_event.sql` | Data Manager | append-only Footprint-Tabelle, Trigger, Rollen `dm_event_writer`/`dm_event_reader`, UTF-8-Prüfung |
+| `data_manager/python/sql/postgres/002_governance_model.sql` | Data Manager | Stammdaten-Tabellen fürs Monitoring, Rolle `dm_governance_sync` |
+| `data_manager/governance/` | Governance (CODEOWNERS) | `governance_model.json` (Soll-Prozesse, Kontrollen, Regeln, Owner), `accepted_deviations.json`, `workflow_definition.json` (Export, erzeugt aus `workflows.py`) |
+| `data_manager/frontend/` | Data Manager | Vue-3-Bausteine (`useWorkflow.ts`, `WorkflowActions.vue`), Regeln für das Frontend |
+| `data_manager/ci/` | Data Manager | CI-Wrapper, Pipeline-Beispiel (GitHub Actions mit PostgreSQL-Service) |
+| `data_manager/examples/` | Data Manager | Demo, Beispiel-Events |
+| `process_monitoring/databricks.yml` | Databricks | Bundle-Definition, Variablen, Targets dev/prod |
+| `process_monitoring/resources/` | Databricks | Job `process_monitoring_refresh` (dbt + Alarm), Dashboard-Ressource |
+| `process_monitoring/setup/01_unity_catalog_connection.sql` | Databricks | einmalig: Connection, Foreign Catalog, Grants, Vollständigkeitskontrolle |
+| `process_monitoring/dbt/` | Databricks | **dbt-Projekt = Data Product** (Modelle, Seeds, Tests, Beispieldaten) |
+| `process_monitoring/src/dashboards/` | Databricks | `process_monitoring.lvdash.json` (Entwurf), `process_graph.vl.json` (Custom Viz) |
+| `process_monitoring/src/sql/alert_critical_findings.sql` | Databricks | Alarm-Task |
+| `mockup/` | – | interaktives Zielbild `dashboard.html` (offline), Screenshots |
+| `tools/` | – | `verify_all.sh`, `run_dbt_local.sh`, `export_graph_json.py`, `check_vega_spec.mjs` |
 
-**Eigentum:** Die Soll-Tabellen gehören der Governance. `system_allowed_transitions` und
-`app_releases` gehören der Data-Manager-Entwicklung. Der Soll-Prozess wird **nie** aus dem Code
-erzeugt, sonst prüft das System gegen sich selbst.
+**Geprüft:** Alle Python-Tests (inklusive PostgreSQL 16), `dbt build` mit Beispieldaten lokal auf
+Spark 4.0.1 mit Delta 4.0 (50/50 inklusive Abnahmetests, auch beim zweiten, inkrementellen Lauf),
+Render-Check der Vega-Lite-Spezifikation (v5/v6).
 
-**Referenz-Konfiguration** (Beispiel, mit dem Auftraggeber zu ersetzen; ◆ = Kontrollschritt):
-
-* **Access Request:** Beantragt → ◆ Prüfung Data Owner → ◆ Prüfung Security → Berechtigung
-  erteilt. Abgelehnt ist nach beiden Prüfungen zulässig.
-  - Funktionstrennung: Beantragt ≠ Prüfung Data Owner.
-  - Frist: Beantragt → Berechtigung erteilt ≤ 5 Tage.
-* **Data Contract:** Entwurf erstellt → ◆ Schema validiert → ◆ Review Data Owner → Freigegeben →
-  Aktiv. Verworfen ist nach dem Review zulässig.
-  - Änderungszyklus: Aktiv → Änderung beantragt → ◆ Schema erneut validiert → ◆ Review Änderung →
-    Neue Version aktiv.
-  - Funktionstrennung: Entwurf ≠ Review.
-  - Frist: Entwurf → Freigegeben ≤ 7 Tage.
-* **Data Product:** Angelegt → Metadaten erfasst → ◆ Data Contract verknüpft → ◆ Qualitätsprüfung
-  → ◆ Freigabe Data Owner → Veröffentlicht.
-  - Nachbesserung erlaubt: Qualitätsprüfung → Metadaten erfasst.
-  - Abgelehnt ist nach der Freigabe-Prüfung zulässig.
-  - Funktionstrennung: Angelegt ≠ Freigabe.
-  - Frist: Angelegt → Veröffentlicht ≤ 10 Tage.
+**Nicht geprüft:** alles in einem echten Databricks-Workspace, also Bundle-Deploy, Job,
+`dbt-databricks` gegen das SQL Warehouse, Foreign Catalog, Dashboard-Import, Custom Viz und
+Alarm-Task. Außerdem `databricks bundle validate` (die CLI war in der Testumgebung nicht
+verfügbar) und die Vue-Bausteine (kein Build).
 
 ---
 
-## 5. Auswertungslogik (`03_views.sql`, 7 Views)
+## 4. Vor dem Start klären
 
-### 5.0 `v_transition_classes`: Klassifizierung jedes denkbaren Übergangs
+1. **Data Manager:** Web-Framework (FastAPI/Django/Flask?), ORM (SQLAlchemy?), CI-System, Read-Replica,
+   Netzwerkweg Databricks → PostgreSQL (Private Link/VPC-Peering).
+2. **Echte Soll-Prozesse** je Objekttyp: Status, erlaubte Übergänge, Endzustände, **Kontrollschritte**.
+3. **Governance-Regeln** (Funktionstrennung, Fristen) inklusive Ausnahmen (technische Accounts, Notfälle).
+4. **Laufende Vorgänge:** Wann gilt ein Vorgang als abgeschlossen?
+5. **Process Owner, Alarm-Empfänger** und Kanal.
+6. **Databricks:** Workspaces dev/prod, Katalog/Schema, SQL Warehouse, `CREATE CONNECTION`-Recht,
+   Secret-Scope, Service Principal für prod, Custom Viz verfügbar?
+7. **Ablage und Freigabe des Soll-Modells:** `data_manager/governance/` mit CODEOWNERS =
+   Governance, oder ein eigenes Repository?
+8. **Zielwerte** (Konformitätsziel je Prozess) und Zeitfenster („aktuell“ 28 Tage, „neu“ 56 Tage).
 
-Für alle Paare aus Ist ∪ Soll ∪ System ∪ abgewiesenen Versuchen: `is_allowed`, `src_in_model`,
-`tgt_in_model`, `skipped_controls`, `finding_type` nach der Tabelle in 5.1. **Einzige Stelle der
-Klassifizierungsregeln.** `v_transitions`, `v_system_conformance`, `v_rejected_attempts` und der
-CI-Check (`classify()`) wenden genau diese Regeln an.
+---
 
-### 5.1 `v_transitions`: jeder direkte Übergang je Vorgang
+## 5. Data Manager: Daten erzeugen (Teil 1)
 
-* Je `process, case_id` nach `event_ts, step_no` sortieren.
-* Übergang: `src = activity`, `tgt = COALESCE(LEAD(activity), '■ Ende')`.
-* Zusätzlich je Vorgang ein Übergang `'▶ Start' → erste Aktivität`.
-* Spalten:
-  - `src_ts`, `tgt_ts`
-  - `actor`, `channel`, `app_version` (jeweils vom Ziel-Event)
-  - `is_system_allowed`: Übergang war zum Zeitpunkt `tgt_ts` laut `system_allowed_transitions` erlaubt
-  - `wait_h` (für Start und Ende NULL)
-  - `is_allowed`, `src_in_model`, `tgt_in_model`
-  - `skipped_controls`: Kontrollschritte mit `step_order` zwischen src und tgt, in Soll-Reihenfolge
-  - `finding_type`
-* **`finding_type`**: erster Treffer gewinnt. `ms`/`mt` sind die Modellzeilen von src/tgt.
+### 5.1 Footprints: `governance.process_event`
 
-| # | Bedingung | Typ | Standard-Schwere |
+Jeder Statuswechsel läuft durch `StateMachine.transition()` und schreibt **in derselben Transaktion**
+genau ein Event. Felder nach [`EVENT_STANDARD.md`](EVENT_STANDARD.md):
+
+`event_id`, `event_type` (`transition`/`rejected`), `process`, `case_id`, `object_version`, `domain`,
+`from_activity`, `activity`, `actor`, `channel` (ui/api/admin_api/batch/migration/system),
+`app_version`, `workflow_version`, `trace_id`, `reason`, `event_ts`, `recorded_at` (DB-Zeit), `seq`.
+
+* **Append-only:** Trigger verbieten UPDATE, DELETE und TRUNCATE.
+* **Rollen:** App = `dm_event_writer` (nur INSERT), Databricks = `dm_event_reader` (nur SELECT).
+* **Abgewiesene Versuche** (`TransitionRejected`) werden über `reject_sink` in einer **eigenen**
+  Transaktion gespeichert. So überleben sie den Rollback der Anwendung (getestet, auch nach
+  vorheriger Schreiboperation).
+* **Vue:** Die UI zeigt nur Aktionen aus `allowed_next()` und behandelt HTTP 409. Kanal und Akteur
+  setzt das Backend. `traceparent` wird mitgeschickt (`data_manager/frontend/README.md`).
+
+### 5.2 Stammdaten: `002_governance_model.sql` + `dm-sync-governance`
+
+Beim Deploy schreibt `dm-sync-governance` idempotent in einer Transaktion:
+
+| Tabelle | Inhalt | Quelle |
+|---|---|---|
+| `app_release` | Releases (version, released_at, notes) | `workflows.RELEASES` (Code) |
+| `workflow_transition` | Status-Maschine **des aktuellen Release**; ältere Releases bleiben stehen und bilden so die Historie | `workflows.py` (Code) |
+| `process_catalog` | Prozess, Owner, Beschreibung | `governance_model.json` |
+| `process_model_version` | Version, Genehmiger, Datum, `is_current` (genau eine) | `governance_model.json` |
+| `process_model_activity` | je Version: Aktivität, `step_order`, `is_terminal`, `is_control` | `governance_model.json` |
+| `process_model_transition` | je Version: erlaubte Übergänge inkl. `▶ Start` / `■ Ende` | `governance_model.json` |
+| `governance_rule` | je Version: `sod` (a und b nicht dieselbe Person) bzw. `sla` (a → b ≤ `max_hours`), Schwere | `governance_model.json` |
+
+* **Soll-Modell-Versionen sind unveränderlich.** Eine neue `model_version` im JSON legt eine neue
+  Version an und markiert sie als aktuell. Die Rolle `dm_governance_sync` darf Soll-Tabellen nicht
+  löschen (getestet).
+* **Trennung:** Der Soll-Prozess (`governance_model.json`, Eigentum der Governance) wird **nie** aus
+  dem Code erzeugt. Die Status-Maschine (`workflows.py`) gehört der Entwicklung.
+
+### 5.3 CI-Check vor jedem Release
+
+`pytest` → `dm-export-workflow` → `dm-check-workflow` vergleicht Status-Maschine und Soll ohne
+Event-Daten:
+- `SYSTEM_ERLAUBT_MEHR`: kritisch, wenn eine Kontrolle umgangen wird,
+- `SOLL_NICHT_UMGESETZT`: hoch,
+- `UNBEKANNTE_AKTIVITAET`: mittel.
+
+Genehmigte Ausnahmen stehen in `accepted_deviations.json` (Begründung, Genehmiger, **Ablaufdatum**;
+abgelaufene blockieren wieder). Exit-Code 1 bei offenen kritischen Befunden.
+
+---
+
+## 6. Databricks: Data Product `process_monitoring` (Teil 2)
+
+### 6.1 Einbindung über Unity Catalog
+
+`setup/01_unity_catalog_connection.sql`, einmalig durch einen Admin:
+- `CREATE CONNECTION dm_postgres TYPE postgresql` mit Secrets,
+- `CREATE FOREIGN CATALOG dm_pg`,
+- Grants für den Job-Service-Principal.
+
+Das dbt-Projekt liest `dm_pg.governance.*` als Quellen (`models/sources.yml`, var `dm_catalog`).
+
+### 6.2 dbt-Schichten
+
+| Schicht | Modelle | Materialisierung |
+|---|---|---|
+| sample | `sample__*`: dieselben 8 Quelltabellen als Beispieldaten; nur mit `--vars '{use_sample_data: true}'` | table |
+| staging | `stg_dm__process_event` (**inkrementell, MERGE auf `event_id`, Überlappungsfenster `recorded_at` − 15 Min.**), `stg_dm__app_release`, `stg_dm__workflow_transition`, `stg_dm__process_catalog`, `stg_dm__process_model_activity` / `_transition`, `stg_dm__governance_rule` (jeweils aktuelle Modell-Version) | view bzw. incremental |
+| intermediate | `int_event_log`, `int_system_allowed_transitions`, `int_transition_classes`, `int_transitions`, `int_rule_violations`, `int_findings`, `int_case_conformance`, `int_system_conformance`, `int_rejected_attempts` | table |
+| marts | `mart_case_conformance`, `mart_findings`, `mart_findings_summary`, `mart_system_conformance`, `mart_rejected_attempts`, `mart_process_graph`, `mart_alert_critical_findings` | table |
+| seeds | `finding_severity` (Schwere, Maßnahme je Befund-Typ), `process_graph_layout` (Position je Aktivität) | Konfiguration des Data Products |
+
+Die Quelle wechselt das Makro `dm_source()`: mit Beispieldaten `ref('sample__…')`, sonst
+`source('data_manager', …)`.
+
+**Warum das Überlappungsfenster:** Bei parallelen Transaktionen kann eine kleinere `seq` später
+committen. Eine Kopie „`seq` > Maximum“ verliert dann Zeilen. Belegt durch
+`test_watermark_overlap_catches_late_commit` gegen PostgreSQL. Voraussetzung: Keine Transaktion im
+Data Manager dauert länger als 15 Minuten (`var overlap_minutes`).
+
+### 6.3 Regeln
+
+**Übergänge** (`int_transitions`): Je Vorgang wird nach `event_ts, step_no` sortiert, nur
+`event_type = 'transition'`. Daraus entstehen `src → tgt` inklusive `▶ Start` → erste Aktivität und
+letzte Aktivität → `■ Ende`.
+
+Spalten: `channel`, `app_version`, `actor` (vom Ziel-Event), `wait_h`, außerdem `is_system_allowed`
+(Übergang zum Zeitpunkt laut `int_system_allowed_transitions` erlaubt).
+
+**Klassifizierung** (`int_transition_classes`, identisch zu `conformance.classify()` in Python). Der
+erste Treffer gewinnt:
+
+| # | Bedingung | Befund-Typ | Schwere (Seed) |
 |---|---|---|---|
-| 0 | Übergang in `process_model_transitions` | NULL (erlaubt) | – |
-| 1 | src oder tgt nicht im Modell | Zusätzliche Aktivität | mittel |
+| 0 | Übergang im Soll | – (erlaubt) | – |
+| 1 | src oder tgt nicht im Soll | Zusätzliche Aktivität | mittel |
 | 2 | tgt = `■ Ende` | Kein gültiger Abschluss | hoch |
-| 3 | `mt.is_terminal` | Abbruch an unzulässiger Stelle | hoch |
-| 4 | `mt.step_order <= ms.step_order` | Rücksprung / Wiederholung | mittel |
-| 5 | `skipped_controls` nicht leer | **Kontrolle umgangen** | **kritisch** |
-| 6 | `mt.step_order > ms.step_order + 1` | Schritt übersprungen | hoch |
+| 3 | tgt ist Ende-Aktivität | Abbruch an unzulässiger Stelle | hoch |
+| 4 | `step_order(tgt) <= step_order(src)` | Rücksprung / Wiederholung | mittel |
+| 5 | übersprungene Kontrollschritte | **Kontrolle umgangen** | **kritisch** |
+| 6 | Sprung über mindestens einen Schritt | Schritt übersprungen | hoch |
 | 7 | sonst | Unzulässiger Übergang | hoch |
 
-### 5.2 `v_rule_violations`: Funktionstrennung und Fristen
+**Historie der Status-Maschine** (`int_system_allowed_transitions`): Gaps and Islands über die
+Releases. Ein Übergang ist ab dem ersten Release einer zusammenhängenden Folge gültig
+(`valid_from` = `released_at`), bis zum ersten Release ohne ihn (`valid_to`; NULL = aktuell).
 
-* Je Vorgang und Aktivität das **erste** Vorkommen ermitteln (Zeit und Person, `MIN_BY`).
-* `sod`: Verstoß, wenn Person(a) = Person(b) → `Funktionstrennung verletzt`, Text = `description`.
-* `sla`: Verstoß, wenn Dauer(a → b) > `max_hours` → `Frist überschritten`, Text =
-  `"a → b über N Tage"`.
-* Schweregrad aus `governance_rules.severity`.
-* *Erweiterung (offen):* Fristverletzung auch für **offene** Vorgänge (b fehlt, a älter als Frist).
+**Regeln** (`int_rule_violations`): Je Vorgang zählt das erste Vorkommen jeder Aktivität.
+- `sod`: Person(a) = Person(b) → Funktionstrennung verletzt.
+- `sla`: Dauer(a → b) > `max_hours` → Frist überschritten.
 
-### 5.3 `v_findings`: alle Befunde je Vorgang
+**Befunde** (`int_findings`):
 
-UNION aus Pfad-Befunden (`v_transitions` mit `finding_type`) und Regelverstößen.
-
-Spalten: `process, case_id, domain, finding_type, finding, transition, event_ts, actor, severity,
-severity_rank, recommended_action, source`.
-
-`finding` (lesbarer Text):
-
-| Typ | Text |
+| Typ | Text in `finding` |
 |---|---|
-| Kontrolle umgangen | `"<skipped_controls> umgangen"` |
-| Zusätzliche Aktivität | `"Zusätzlicher Schritt: <Aktivität>"` |
-| Rücksprung | `"Rücksprung: src → tgt"` |
-| sonst | `"src → tgt"` |
+| Kontrolle umgangen | `„<Kontrollen> umgangen“` |
+| Zusätzliche Aktivität | `„Zusätzlicher Schritt: …“` |
+| Rücksprung | `„Rücksprung: a → b“` |
+| Regelverstoß | Beschreibung der Regel |
 
-Der **Rückweg aus einer Zusatz-Aktivität** (src nicht im Modell, tgt im Modell) wird **nicht**
-gezählt. Sonst erscheint jede Zusatz-Aktivität doppelt.
+Der Rückweg aus einer Zusatz-Aktivität wird nicht doppelt gezählt. Weitere Spalten: `channel`,
+`app_version`, `system_status` (vom System erlaubt / außerhalb des Workflows).
 
-`v_findings` enthält zusätzlich `channel`, `app_version` und `system_status`
-(`vom System erlaubt` | `außerhalb des Workflows`; bei Regelverstößen NULL).
-
-### 5.4 `v_case_conformance`: ein Datensatz je Vorgang
-
-`process, case_id, domain, initiator` (Person des ersten Events), `case_start`, `throughput_days`,
-außerdem:
+**Vorgänge** (`int_case_conformance`):
 
 | Spalte | Bedeutung |
 |---|---|
-| `is_conformant` | alle Übergänge erlaubt |
-| `is_compliant` | konform **und** kein Regelverstoß |
-| `n_findings` | Anzahl Befunde |
-| `has_critical`, `has_control_bypass`, `has_sod_violation`, `has_sla_breach` | Flags je Befund-Art |
-| `has_outside_workflow` | mindestens ein Übergang am Workflow vorbei |
-| `start_channel` | Kanal des ersten Events |
-| `findings` | sortierte, eindeutige Liste mit `' \| '` |
+| `is_conformant` | Pfad komplett laut Soll |
+| `is_compliant` | zusätzlich kein Regelverstoß |
+| `has_critical`, `has_control_bypass`, `has_sod_violation`, `has_sla_breach`, `has_outside_workflow` | Flags je Befund-Art |
+| `findings` | Liste der Befunde |
+| `initiator`, `start_channel`, `throughput_days` | Kontext des Vorgangs |
 
-### 5.5 `v_system_conformance`: Soll · System · Ist je Übergang
+**System-Konformität** (`int_system_conformance`) je Übergang aus Soll ∪ System ∪ Ist. Der erste
+Treffer gewinnt:
 
-Je `process, src, tgt` (alle Paare aus `v_transition_classes`): `in_soll`, `in_system`
-(aktuell), `observed_cases`, `cases_outside_workflow`, `rejected_attempts`, `channels`,
-`first_seen`, `last_seen`, `system_note`, `since_release`, `removed_at`, `finding_type`,
-`skipped_controls`. Dazu `system_category` und `severity` (erster Treffer gewinnt):
-
-| # | Bedingung | Kategorie | Schwere |
-|---|---|---|---|
-| 1 | beobachtet, aber zum Zeitpunkt nicht vom System erlaubt | **Umgehung außerhalb des Workflows** | kritisch |
-| 2 | im Soll, nicht im System | Soll-Schritt nicht implementiert | hoch |
-| 3 | nicht im Soll, im System, beobachtet | System lässt mehr zu – genutzt | kritisch bei Kontrolle umgangen, sonst mittel |
-| 4 | nicht im Soll, im System, nie beobachtet | System lässt mehr zu – **latent** | hoch bei Kontrolle umgangen, sonst mittel |
-| 5 | nicht im Soll, früher im System | Nicht mehr erlaubt | – (info) |
-| 6 | nicht im Soll, nur abgewiesene Versuche | Vom System abgewiesen | – (info) |
-| 7 | sonst | Konform | – |
-
-Bewusste Abstufung: Im Monitoring ist eine latente Lücke „hoch“, weil noch nichts passiert ist.
-Im **CI-Check** ist dieselbe Lücke **kritisch** und blockiert das Release, weil sie dort noch
-billig zu schließen ist.
-
-### 5.6 `v_rejected_attempts`
-
-Events mit `event_type = 'rejected'` plus Klassifizierung des versuchten Übergangs, z. B.
-„Versuch: Schema validiert umgehen“. Sie belegen, dass eine Kontrolle technisch greift, und
-zeigen, wo Anwender eine Umgehung versuchen.
-
----
-
-## 6. Dashboard-Datasets
-
-| Dataset | Datei | Inhalt |
+| # | Kategorie | Schwere |
 |---|---|---|
-| `process_graph` | 04 | Graph-Zeilen eines Prozesses (siehe 7). Parameter `:process` (Pflicht), `:domain` (`'Alle'` = alle) |
-| `case_conformance` | 05 | `v_case_conformance` + `process_owner` |
-| `findings` | 06 | `v_findings` + `process_owner` |
-| `findings_summary` | 07 | je `process, finding_type, finding, severity` (siehe unten), Parameter `:domain` |
-| `system_conformance` | 09 | `v_system_conformance` + `process_owner` |
-| `rejected_attempts` | 10 | `v_rejected_attempts` + `process_owner` |
+| 1 | Umgehung außerhalb des Workflows (beobachtet, zum Zeitpunkt nicht vom System erlaubt) | kritisch |
+| 2 | Soll-Schritt nicht implementiert | hoch |
+| 3 | System lässt mehr zu – genutzt | kritisch bei Kontrolle umgangen, sonst mittel |
+| 4 | System lässt mehr zu – latent (nie beobachtet) | hoch bei Kontrolle umgangen, sonst mittel |
+| 5 | Nicht mehr erlaubt (früher im System) | info |
+| 6 | Vom System abgewiesen (nur abgewiesene Versuche) | info |
+| 7 | Konform | – |
 
-`findings_summary` enthält: `cases`, `pct_of_cases`, `cases_last_4w`, `pct_last_4w`, `first_seen`,
-`last_seen`, `status`, `recommended_action`, `process_owner`, `channels`, `first_release` (Release
-des ersten Vorkommens) und `system_status` (`außerhalb des Workflows` vor `vom System erlaubt` vor
-`Regelprüfung`).
+Bewusste Abstufung: Eine latente Lücke ist im Monitoring „hoch“, im CI-Check „kritisch“ (blockiert
+das Release).
 
-* „Letzte 4 Wochen“ = Vorgänge mit `case_start >= MAX(case_start des Prozesses) - 28 Tage`.
-  Bezug ist der **jüngste Vorgangsstart**, nicht das letzte Event. Späte Events würden aktive
-  Befunde sonst als erledigt zeigen. Bei Live-Daten ist `current_timestamp()` möglich.
-* `status`:
-  - `'neu'`, wenn das erste Vorkommen in den letzten **8 Wochen** liegt,
-  - sonst `'tritt weiterhin auf'`, wenn ein Vorkommen in den letzten 4 Wochen liegt,
-  - sonst `'nicht mehr aufgetreten'`.
-* Sortierung: `severity_rank`, dann `cases_last_4w` absteigend.
+**Befund-Übersicht** (`mart_findings_summary`) je `process`, `domain_scope` (`'Alle'` oder eine
+Domäne), Befund:
+- `cases`, `pct_of_cases`,
+- `cases_last_4w`, `pct_last_4w` (Vorgänge mit Start in den letzten 28 Tagen ab jüngstem Start),
+- `first_seen`, `last_seen`,
+- `status`: `neu`, wenn das erste Vorkommen in den letzten 56 Tagen liegt; sonst `tritt weiterhin
+  auf`, wenn eines in den letzten 28 Tagen liegt; sonst `nicht mehr aufgetreten`,
+- `channels`, `first_release`, `system_status`, `recommended_action`, `process_owner`.
 
-**Alarm (`08_alert_critical_findings.sql`):** kritische Befunde mit Vorkommen in den letzten
-7 Tagen oder neu (8 Wochen). Enthält `example_cases` (5 IDs) und `process_owner`. Als
-**Databricks SQL Alert** täglich, Bedingung „Zeilen > 0“, Empfänger je Process Owner.
+**Alarm** (`mart_alert_critical_findings`): kritische Befunde mit Vorkommen in den letzten 7 Tagen
+oder neu (56 Tage). Dazu `example_cases`, `channels`, `system_status` und `process_owner`.
 
-Spark/Databricks-Fallstricke:
-* keine verschachtelten Aggregate (Referenzwerte in eigener CTE),
-* `sequence(1, 0)` liefert `[1, 0]`,
-* `MIN_BY` für „Person des ersten Events“.
+### 6.4 Prozessgraph: `mart_process_graph` + `process_graph.vl.json`
 
----
+Je `process` und `domain_scope` wird eine Ergebnismenge mit folgenden Zeilentypen berechnet:
+- `node` (x, y, w, h; Aktivität 180 × 44, Start/Ende 28 × 28; `is_control`),
+- `edge` (Stützpunkte, `seq`),
+- `arrow` (`shape`),
+- `label`,
+- `frame` (Zeichenbereich 800 × Höhe).
 
-## 7. Prozessgraph
+Weitere Spalten: `conformance` (soll/abweichung/kontrolle_umgangen/latent) und `system_status`.
 
-### 7.1 Dataset `process_graph` (04): Layout in SQL
+**Kantenverlauf** (rechtwinklig; der Typ wird in dieser Reihenfolge bestimmt):
 
-Vega-Lite kann Graphen nicht anordnen, darum liefert SQL alle Geometrien in **einer**
-Ergebnismenge:
-
-| Spalte | Bedeutung |
+| Typ | Verlauf |
 |---|---|
-| `row_type` | `node` \| `edge` (Stützpunkte, Reihenfolge `seq`) \| `arrow` \| `label` \| `frame` (2 unsichtbare Eckpunkte (0,0) und (800, Höhe), legen den Zeichenbereich fest) |
-| `id`, `src`, `tgt`, `cases`, `median_wait_h` | Knoten: Anzahl Ziel-Events; Start/Ende: Anzahl Vorgänge. Kante: Anzahl Übergänge |
-| `x`, `y`, `w`, `h` | Koordinaten; Knoten = Mittelpunkt, Aktivität 180 × 44, Start/Ende 28 × 28 |
-| `shape` | Pfeilrichtung `triangle-down/left/right` |
-| `node_kind` | `start` \| `end` \| `activity` |
-| `is_control` | 1 = Kontrollschritt |
-| `conformance` | `soll` \| `abweichung` \| `kontrolle_umgangen` \| `latent` (vom System erlaubt, nicht im Soll, nie genutzt: dünn, grau gepunktet, ohne Zahl); Knoten: im Modell? |
-| `system_status` | `vom System erlaubt` \| `außerhalb des Workflows` \| `erlaubt, ungenutzt` (Tooltip) |
-| `finding_type` | für Tooltips |
+| `self` | Schleife oben rechts |
+| `down_across` | Ziel = Ende: am äußeren Rand der Quelle (x0 ± (w0/2 − 8)) nach unten, dann seitlich in den Kreis |
+| `skip` | senkrecht, aber ein Kasten liegt dazwischen: links raus; Spur `min(linker Rand) − 25 − 14·r`; runter bis `y1 − h1/2 − 10 − 8·rt`; zum Eingang; oben hinein |
+| `straight` | senkrecht |
+| `side_down` | aus der Seitenkante, waagrecht, oben hinein |
+| `same_row` | waagrecht; nach rechts 11 über, nach links 11 unter der Mitte |
+| `back` | rechts raus (y0 − 8), Spur `max(rechter Rand) + 25 + 14·r`, hoch, rechts hinein (y1 + 8) |
 
-**Kantenverlauf (rechtwinklig).** Typ in dieser Reihenfolge bestimmen:
+**Verteilung:**
+- **Eingänge oben am Ziel:** Gruppen skip (−1, lange zuerst), links (0, y0 absteigend), senkrecht
+  (1), rechts (2, y0 aufsteigend); Abstand ±min(w1/2 − 20, 25·(n − 1)).
+- **Seitliche Ausgänge:** entferntere Ziele weiter oben; ±min(h0/2 − 8, 8·(n − 1)).
+- **Seitliche Eingänge in den End-Kreis:** ±5.
 
-| Typ | Bedingung | Verlauf |
-|---|---|---|
-| `self` | src = tgt | Schleife oben rechts |
-| `down_across` | Ziel = Ende, x verschieden | am äußeren Rand der Quelle (x0 ± (w0/2 − 8)) senkrecht bis zur Höhe des End-Kreises, dann waagrecht hinein |
-| `skip` | senkrecht nach unten, aber ein Kasten liegt dazwischen | links raus; Spur links: `min(linker Rand) − 25 − 14·r` (r = globaler Rang nach Sprunglänge, kurze innen); runter bis `y1 − h1/2 − 10 − 8·rt` (rt = Rang je Ziel, längster Sprung zuerst); waagrecht zum Eingang; oben hinein |
-| `straight` | Ziel tiefer, \|Δx\| < w0/2 | senkrecht |
-| `side_down` | Ziel tiefer, seitlich | aus der Seitenkante (zum Ziel hin), waagrecht, dann senkrecht oben hinein |
-| `same_row` | gleiche Höhe | waagrecht; nach rechts 11 über, nach links 11 unter der Mitte |
-| `back` | Ziel höher | rechts raus (y0 − 8), Spur rechts `max(rechter Rand) + 25 + 14·r`, hoch, rechts hinein (y1 + 8) |
+**Latente Kanten** (System erlaubt, Soll nicht, insgesamt nie genutzt) werden dünn und grau
+gepunktet gezeichnet, ohne Zahl.
 
-**Verteilung, damit sich nichts kreuzt:**
-* **Eingänge oben am Ziel:** Gruppen skip (−1, Sprunglänge absteigend), von links (0, `y0`
-  absteigend), senkrecht (1), von rechts (2, `y0` aufsteigend). Verteilt über
-  ±min(w1/2 − 20, 25·(n − 1)).
-* **Seitliche Ausgänge** je Quelle und Seite: entferntere Ziele weiter oben;
-  ±min(h0/2 − 8, 8·(n − 1)).
-* **Seitliche Eingänge in den End-Kreis:** ±5.
+**Vega-Lite:**
+- `data.name = "databricks_query"`, Breite und Höhe `container`, Skalen ohne feste Domain (die
+  `frame`-Zeilen bestimmen die Ausdehnung).
+- Ebenen:
+  - Kanten: Farbe und Strich nach `conformance`: grau `#8f8e88`, orange `#eb6834` gestrichelt, rot
+    `#d03b3b` gestrichelt, latent `#a3a29c` gepunktet.
+  - Pfeile.
+  - Beschriftungs-Pillen (nur bei `cases > 0`) mit Tooltip: Von, Nach, Befund, System, Übergänge,
+    Median-Wartezeit.
+  - Kästen soll und abweichung. Die Abweichungs-Ebene enthält zusätzlich die `frame`-Zeilen, damit
+    sie nie leer ist.
+  - Text und „◆ KONTROLLE“.
+  - Start- und End-Kreise.
+- Muss in Vega-Lite 5 und 6 ohne Warnungen kompilieren.
 
-**Pfeilspitze:** 5 Einheiten vor dem Endpunkt. **Beschriftung:** Mitte des senkrechten
-Hauptsegments.
-
-**Layout-Empfehlung:** Standardprozess senkrecht bei x = 400 mit 80 Einheiten Abstand,
-Endzustände und Nebenzyklen seitlich (x ≈ 150 / 660).
-
-### 7.2 Vega-Lite (`process_graph.vl.json`)
-
-* `"data": {"name": "databricks_query"}`, `width/height: "container"`.
-* Skalen x/y **ohne feste Domain** (`nice: false, zero: false`, y `reverse: true`). Die
-  `frame`-Zeilen bestimmen die Ausdehnung. Die Höhe passt sich je Prozess an.
-* Ebenen:
-  - **Kanten** (`line`, `detail = id`, `order = seq`, `strokeWidth` = sqrt 1–7 px). Farbe und
-    Strich nach `conformance`: soll `#8f8e88` durchgezogen, abweichung `#eb6834` gestrichelt,
-    kontrolle_umgangen `#d03b3b` gestrichelt, latent `#a3a29c` gepunktet `[2,3]`. Legende oben
-    links, vertikal (`labelLimit` 260).
-  - **Pfeile** (`point`, `shape` ohne Skala, `size` = sqrt 45–190).
-  - **Beschriftungs-Pillen** nur bei `cases > 0` (eigener SVG-Pfad je Zeile, Breite nach Ziffern)
-    mit Tooltip: Von, Nach, Befund, System, Übergänge, Median-Wartezeit.
-  - **Kästen soll** (Füllung nach `cases` `#f4f8fd`–`#86b6ef`, Rand `#6da7ec`).
-  - **Kästen abweichung** (`#fdf0ea`, Rand orange, `strokeDash` **als Mark-Eigenschaft**). Diese
-    Ebene bekommt zusätzlich die `frame`-Zeilen mit Deckkraft 0, damit sie nie leer ist (sonst
-    Warnung „Infinite extent“).
-  - **Text** (Name fett 11 px, Anzahl 10 px).
-  - **Kontroll-Markierung** „◆ KONTROLLE“ rechts in der Zeile mit der Anzahl.
-  - **Start/Ende-Kreise.**
-* Feste Farben, funktionieren in hellem und dunklem Theme. Muss in Vega-Lite 5 **und** 6 ohne
-  Warnungen kompilieren.
+**Felder der Custom Viz** (ohne Aggregation): `process, domain_scope, row_type, id, src, tgt, cases,
+median_wait_h, x, y, w, h, seq, shape, node_kind, conformance, is_control, finding_type, system_status`.
 
 ---
 
-## 8. Dashboard (3 Seiten)
+## 7. Dashboard (3 Seiten) und Jobs
 
-Zielbilder: `dashboard_preview.png` (Übersicht), `dashboard_detail_preview.png` (Detail), `dashboard_system_preview.png` (System-Konformität).
+Zielbilder: `mockup/dashboard_preview.png`, `mockup/dashboard_detail_preview.png` und
+`mockup/dashboard_system_preview.png`. Interaktiv: `mockup/dashboard.html`.
 
-### Seite „Übersicht“ (Governance-Lage über alle Prozesse)
+**Datasets** sind ausschließlich `SELECT * FROM mart_*`, ohne Parameter. Katalog und Schema kommen
+je Target aus dem Bundle. Gefiltert wird über die Felder `process`, `domain` bzw. `domain_scope`
+(Standard `'Alle'`).
 
-1. **Filter:** Zeitraum (`case_start`), Datendomäne.
-2. **Hinweisbanner**, wenn ein **neuer kritischer Befund** existiert: Prozess, Befund, Anzahl,
-   seit wann, Verantwortlicher. Quelle: `findings_summary` mit `status = 'neu'`.
-3. **Sechs Zähler:**
-   - Vorgänge
-   - Prozesskonformität (`AVG(is_conformant)`)
-   - Governance-konform (`AVG(is_compliant)`)
-   - Vorgänge mit kritischem Befund
-   - Aktive kritische Befunde (kritisch und Status ≠ nicht mehr)
-   - Neue Befunde
-4. **Je Prozess eine Karte:** Process Owner, Konformitätsrate, Mini-Verlauf, Zahlen (Vorgänge,
-   Kontrolle umgangen, Funktionstrennung, Frist) und der wichtigste aktive kritische Befund.
-   Klick öffnet die Detailseite mit diesem Prozess.
-5. **Linie „Prozesskonformität je Startmonat“** (eine Linie je Prozess, nur volle Monate,
-   Ziellinie, Ereignismarkierung) und **Balken „Betroffene Vorgänge je Prozess und Befund-Typ“**.
-6. **Tabelle „Handlungsbedarf“:** aktive Befunde mit Schwere (Icon und Text), Status (neu /
-   weiterhin), Prozess, Befund, letzte 4 Wochen (Anzahl und %), gesamt, erstmals, verantwortlich,
-   empfohlene Maßnahme.
-7. **Tabelle „Nicht mehr aufgetreten“:** Wirksamkeit umgesetzter Maßnahmen.
+**Seite „Übersicht“:**
+- Filter.
+- Banner bei neuem kritischem Befund.
+- Sechs Zähler: Vorgänge, Prozesskonformität, Governance-konform, Vorgänge mit kritischem Befund,
+  aktive kritische Befunde, neue Befunde.
+- Je Prozess eine Karte: Owner, Rate, Mini-Verlauf, Kennzahlen, wichtigster Befund; ein Klick
+  öffnet die Detailseite.
+- Konformität je Startmonat (eine Linie je Prozess, nur volle Monate, Ziel, Ereignis).
+- Vorgänge je Prozess und Befund-Typ.
+- Tabelle „Handlungsbedarf“: Schwere, Status, Prozess, Befund mit Meta-Zeile (Typ · Kanal · seit
+  Release · System-Status), letzte 4 Wochen, gesamt, erstmals, verantwortlich, Maßnahme.
+- Tabelle „Nicht mehr aufgetreten“.
 
-### Seite „Prozessdetail“
+**Seite „Prozessdetail“:**
+- Prozess-Auswahl (Filter auf `process` in allen Datasets inklusive `mart_process_graph`).
+- Zähler: Vorgänge, Konformität, Kontrolle umgangen, Funktionstrennung, Frist, Ø Durchlaufzeit.
+- Prozessgraph (Custom Viz).
+- Konformität je Woche, Befund-Typen.
+- Befund-Tabelle, betroffene Vorgänge.
 
-1. **Prozess-Auswahl** (Single Select, bindet den Parameter `:process` des Graphen und filtert
-   die anderen Datasets), Datendomäne, Anzeige des Process Owners.
-2. **Zähler:** Vorgänge, Konformität (mit Governance-konform), Kontrolle umgangen,
-   Funktionstrennung verletzt, Frist überschritten, Ø Durchlaufzeit (konform vs. abweichend).
-3. **Links, doppelte Höhe:** Soll-Ist-Prozessgraph (Custom Viz). **Rechts:** Konformität je
-   Startwoche (mit Ereignis) und Befund-Typen.
-4. **Tabelle Befunde des Prozesses:** inkl. „nicht mehr aufgetreten“.
-5. **Tabelle betroffene Vorgänge:** Vorgang, Domäne, gestartet von, Start, Durchlaufzeit,
-   Befunde. Das ist der Drill-down für die Klärung im Data Manager.
+**Seite „System-Konformität“:**
+- Zähler: Übergänge System/Soll, System lässt mehr zu (genutzt/latent), Soll nicht implementiert,
+  außerhalb des Workflows, abgewiesene Versuche, CI-Ergebnis.
+- Tabelle „Soll · System · Ist je Übergang“.
+- Vorgänge nach Kanal, abgewiesene Versuche.
+- Release-Zeitleiste mit Wirkung und CI-Ergebnis. Das CI-Ergebnis ist der JSON-Bericht von
+  `dm-check-workflow`; der Data Manager kann ihn optional als Tabelle bereitstellen.
 
-### Seite „System-Konformität“ (Soll · System · Ist)
+Schwere und Status immer mit Icon und Text, nie nur über Farbe.
 
-Zielbild: `dashboard_system_preview.png`.
+**Job `process_monitoring_refresh`** (`resources/process_monitoring.job.yml`), alle 15 Minuten:
+1. `dbt_task`: `dbt deps` und `dbt build --target databricks --vars '{dm_catalog: …}'`, auf dem
+   SQL Warehouse, Umgebung mit `dbt-databricks`.
+2. `alert_critical_findings` (SQL-Task): schlägt fehl, wenn `mart_alert_critical_findings` Zeilen
+   hat. Dann geht eine E-Mail an `var.alert_emails`.
 
-1. **Filter:** Prozess, Release (Status-Maschine).
-2. **Erklärzeile** mit den drei Ebenen Soll, System und Ist und ihren Quellen.
-3. **Zähler:**
-   - Übergänge im System (vs. Soll)
-   - System lässt mehr zu (genutzt / latent)
-   - Soll nicht implementiert
-   - Vorgänge außerhalb des Workflows (mit Kanälen)
-   - Abgewiesene Versuche
-   - Ergebnis des CI-Checks für das aktuelle Release
-4. **Tabelle „Soll · System · Ist je Übergang“:** alle nicht konformen Übergänge mit Schwere,
-   Kategorie (+ Befund-Typ, umgangene Kontrollen), Prozess, Übergang, Soll ✓/–, System ✓/–
-   (+ Hinweis, seit Release, entfernt am), Ist-Vorgänge, davon außerhalb, abgewiesen, Kanäle.
-5. **Balken „Vorgänge mit kritischem Befund nach Kanal“** und **Tabelle abgewiesener Versuche**.
-6. **Release-Zeitleiste** (aus `app_releases`) mit den Befunden, die ab diesem Release erstmals
-   auftreten, und **Ergebnis des CI-Checks**: Befunde mit Status blockiert, genehmigt bis …,
-   Genehmigung abgelaufen. Quelle ist der JSON-Bericht des Skripts, z. B. als Tabelle geladen.
+Alternative: ein Databricks SQL Alert direkt auf dem Mart.
 
-In den Befund-Tabellen der anderen Seiten steht unter jedem Befund eine Meta-Zeile:
-Befund-Typ · Kanal · seit Release · System-Status.
-
-Schwere und Status nie nur über Farbe zeigen, immer mit Icon und Text. Statusfarben (rot,
-orange, grün) nur dafür verwenden.
+**Dashboard-Ressource** (`resources/process_monitoring.dashboard.yml`): `file_path` auf das
+`.lvdash.json`, `dataset_catalog` und `dataset_schema` je Target (im Workspace prüfen). Nach dem
+Einrichten der Custom Viz exportieren: `databricks bundle generate dashboard --existing-id …`.
 
 ---
 
-## 9. Umsetzungsschritte
+## 8. Umsetzungsschritte
 
-1. Punkte aus Abschnitt 3 klären.
-2. View `event_log` auf das Data-Manager-Log anlegen, inklusive Status-Mapping. Plausibilität
-   prüfen: Anzahl Vorgänge je Prozess, Aktivitäten je Prozess, Zeitraum.
-3. `02_process_model.sql` mit den echten Soll-Prozessen, Kontrollen, Regeln, Verantwortlichen
-   und Layout füllen und ausführen.
-4. `03_views.sql` ausführen. Prüfen, welche Befunde entstehen, und mit den Process Ownern
-   klären: **echte Governance-Lücke oder fehlender Eintrag im Soll-Modell?**
-5. Regel für laufende Vorgänge einbauen (Klärungspunkt 5), konsistent in den Views.
-6. Datasets 04–07, 09 und 10 im Dashboard anlegen. Parameter `:process` und `:domain` mit Standardwerten
-   anlegen.
-7. Dashboard laut Abschnitt 8 aufbauen. Custom Viz mit `process_graph.vl.json`; Felder **ohne
-   Aggregation**: `row_type, id, src, tgt, cases, median_wait_h, x, y, w, h, seq, shape, node_kind,
-   conformance, is_control, finding_type, system_status`.
-8. SQL Alert aus `08_…` einrichten, täglich, Empfänger je Process Owner.
-8a. **Im Data Manager (Python)** das Paket `datamanager_governance` einbinden
-    ([`EVENT_STANDARD.md`](EVENT_STANDARD.md), Abschnitt 7):
-    - die echten Status-Maschinen in `workflows.py` pflegen,
-    - alle Statuswechsel über `StateMachine.transition()` führen (UI, API, Admin, Batch),
-    - Migration mit `python/sql/postgres/001_process_event.sql` (Tabelle, Trigger, Rollen),
-    - EventStore passend zum ORM ergänzen, `reject_sink` mit eigener Transaktion einrichten,
-    - in Databricks `12_federation_ingest.sql`: Connection mit Secrets und read-only User
-      (Read-Replica), Foreign Catalog, Delta-Tabelle, `MERGE` als Job alle 5–15 Minuten. Damit
-      ersetzt die View `event_log` die Beispieltabelle.
-8b. **CI-Check** in die Release-Pipeline des Data Managers aufnehmen: `pytest`,
-    `dm-export-workflow`, `dm-check-workflow` (Beispiel `ci/github-actions-example.yml`). Prozess für genehmigte Ausnahmen mit der Governance
-    vereinbaren (`accepted_deviations.json`: Begründung, Genehmiger, Ablaufdatum).
-8c. Job einrichten, der nach jedem Release bzw. jeder Freigabe des Soll-Modells
-    `11_load_config_from_json.sql` ausführt. Dabei die Historie der Status-Maschine behalten.
-9. Betrieb:
-   - Bei großem Log `v_transitions` und `v_findings` als **materialisierte Tabellen** per Job
-     (z. B. stündlich oder täglich) statt Views.
-   - Den fertigen Dashboard-Stand als `.lvdash.json` **exportieren** und versionieren. Der Export
-     ist die verlässliche Formatquelle.
-10. Optional: `process_mining.lvdash.json` importieren. In der Import-Version hat
-    `findings_summary` keinen `:domain`-Parameter.
+Siehe [`AGENTS.md`](AGENTS.md), Arbeitspakete AP1–AP10, jeweils mit Prüfung.
 
 ---
 
-## 10. Abnahmekriterien
+## 9. Abnahmewerte (Beispieldaten, `use_sample_data: true`)
 
-### Mit den Beispieldaten (`01` + `02`)
-
-Diese Werte müssen exakt herauskommen:
+Als dbt-Tests implementiert (`process_monitoring/dbt/tests/acceptance_*.sql`). `dbt build` schlägt
+fehl, wenn ein Wert abweicht.
 
 | Prüfung | Erwartet |
 |---|---|
 | Vorgänge | 1.000 (AR 500, DC 300, DP 200) |
-| Prozesskonformität | gesamt 74,5 % · AR 72,0 % · DC 78,3 % · DP 75,0 % |
-| Governance-konform | gesamt 68,5 % · AR 63,6 % · DC 74,3 % · DP 72,0 % |
-| Vorgänge mit kritischem Befund | 251 (AR 123, DC 73, DP 55) |
-| Kontrolle umgangen / Funktionstrennung / Frist | AR 105 / 23 / 42 · DC 65 / 10 / 6 · DP 50 / 6 / 1 |
-| `findings_summary` | 14 Zeilen; 7 aktive kritische; genau 1 `neu`: DP „Data Contract verknüpft, Qualitätsprüfung, Freigabe Data Owner umgangen“ (10 Vorgänge, erstmals 21.05.2026) |
-| Weitere Status | AR „Prüfung Security umgangen“: 90 Vorgänge, erstmals 02.04.2026, 29,2 % der letzten 4 Wochen, „tritt weiterhin auf“, Kanal `system`, seit Release 2.3, vom System erlaubt. DC „Schema validiert umgangen“: 25, zuletzt 30.03.2026, „nicht mehr aufgetreten“ |
-| Konformität je Monat (AR) | Jan 90,0 % → Apr 60,6 % → Jun 58,9 % |
-| Prozessgraph AR | 7 Knoten; rot: Start → Berechtigung erteilt (15, außerhalb des Workflows), Prüfung Data Owner → Berechtigung erteilt (90); orange: Prüfung Data Owner → Beantragt (35); latent: Beantragt → Berechtigung erteilt |
-| Prozessgraph DC | 12 Knoten; rot: Entwurf → Review Data Owner (25), Änderung beantragt → Neue Version aktiv (40) |
-| Prozessgraph DP | 9 Knoten; rot: Angelegt → Veröffentlicht (10, außerhalb des Workflows), Data Contract verknüpft → Freigabe (20), Metadaten → Qualitätsprüfung (20); grau als erlaubter Rücksprung: Qualitätsprüfung → Metadaten (25); latent: Metadaten erfasst → Freigabe Data Owner |
-| Alarm | 5 Zeilen, davon 1 mit `is_new = true` (DP, s. o.) |
-| `system_conformance` | 42 Übergänge, 31 konform. Kritisch: 2 × Umgehung außerhalb des Workflows (AR Start → Berechtigung erteilt, 15, `admin_api`; DP Angelegt → Veröffentlicht, 10, `batch`) und 4 × „System lässt mehr zu – genutzt“ mit umgangener Kontrolle. Hoch: 2 × latent (AR Beantragt → Berechtigung erteilt; DP Metadaten erfasst → Freigabe Data Owner), 1 × Soll nicht implementiert (DC Review Änderung → Verworfen). Mittel: AR Rücksprung (35). Info: DC Entwurf → Review „Nicht mehr erlaubt“ (25 Vorgänge, 15 abgewiesene Versuche) |
-| Übergänge System / Soll | 38 / 32 |
-| `rejected_attempts` | 25: DC „Versuch: Schema validiert umgehen“ 15 (ab 16.04.2026, Release 2.4); DP „Versuch: Data Contract verknüpft, Qualitätsprüfung, Freigabe Data Owner umgehen“ 10 (ab 21.05.2026) |
-| CI-Check (`--today 2026-07-06`) | 8 Befunde: 6 × kritisch blockierend (davon AR Prüfung Data Owner → Berechtigung erteilt wegen **abgelaufener** Genehmigung), 1 × hoch (SOLL_NICHT_UMGESETZT), 1 × mittel genehmigt; Exit-Code 1 |
-| Parameter | `:domain = 'Finance'` liefert kleinere, gültige Ergebnisse ohne Fehler |
-
-### Allgemein
-
-* Alle Views und Datasets laufen im SQL Warehouse ohne Fehler.
-* Custom Viz rendert für jeden Prozess ohne Konsolenfehler. Tooltips funktionieren, helles und
-  dunkles Theme sind lesbar.
-* Der CI-Check bricht ein Release ab, wenn die Status-Maschine eine Kontrolle umgehen lässt und
-  keine gültige Ausnahme existiert.
-* `pytest python/tests` ist grün: 15 Tests, davon 5 gegen PostgreSQL mit `DM_TEST_PG_DSN`. `dm-export-workflow` liefert dieselben 38 Übergänge wie
-  `config/workflow_definition.json`. Ein abgewiesener Versuch bleibt nach einem Rollback in
-  `process_event` erhalten. UPDATE und DELETE auf `process_event` werden abgewiesen.
-* Die Vollständigkeitskontrolle aus `12_federation_ingest.sql` meldet 0 fehlende Events.
-* **Ein neuer Prozess oder eine Prozessänderung erfordert nur Einträge in `02_process_model.sql`**
-  (und ggf. im Status-Mapping der Event-View), keine Änderung an Views, Datasets oder Dashboard.
-* Der Alarm erreicht den Process Owner bei einem neuen kritischen Befund.
-* Keine Databricks App.
+| Prozesskonformität | gesamt 74,5 % · AR 72,0 · DC 78,3 · DP 75,0 |
+| Governance-konform | gesamt 68,5 % · AR 63,6 · DC 74,3 · DP 72,0 |
+| kritisch / Kontrolle umgangen / Funktionstrennung / Frist | gesamt 251 / 220 / 39 / 49 · AR 123/105/23/42 · DC 73/65/10/6 · DP 55/50/6/1 |
+| AR Konformität je Monat | Jan 90,0 · Apr 60,6 · Jun 58,9 |
+| `mart_findings_summary` (Alle) | 14 Zeilen; 7 aktive kritische; 1 neu: DP „Data Contract verknüpft, Qualitätsprüfung, Freigabe Data Owner umgangen“ (10, erstmals 21.05.2026); AR „Prüfung Security umgangen“: 90, 02.04.2026, 29,2 %, tritt weiterhin auf, Kanal system, seit 2.3, vom System erlaubt; DC „Schema validiert umgangen“: 25, zuletzt 30.03.2026, nicht mehr aufgetreten; 5 domain_scopes |
+| `mart_system_conformance` | 42 Übergänge, 31 konform; System 38 / Soll 32; außerhalb: AR ▶ Start → Berechtigung erteilt, DP Angelegt → Veröffentlicht; latent: AR Beantragt → Berechtigung erteilt, DP Metadaten erfasst → Freigabe Data Owner; nicht implementiert: DC Review Änderung → Verworfen; 5 × genutzt |
+| `mart_rejected_attempts` | 25 |
+| `mart_alert_critical_findings` | 5 Zeilen, 1 neu |
+| `mart_process_graph` (Alle) | Knoten AR 7 / DC 12 / DP 9; latent AR „Beantragt → Berechtigung erteilt“, DP „Metadaten erfasst → Freigabe Data Owner“; 15 Kombinationen aus Prozess und Scope |
+| Data Manager | 17 pytest-Tests (6 PostgreSQL); `dm-export-workflow` = 38 Übergänge = `governance/workflow_definition.json`; `dm-check-workflow --today 2026-07-06`: 8 Befunde, 6 blockierend, Exit 1; Sync: 4 Releases, 38 Übergänge (2.5), 32 Soll-Übergänge, 6 Regeln |
 
 ---
 
-## 11. Risiken und Fallstricke
+## 10. Risiken und Fallstricke
 
-* **Datenqualität des Audit-Logs:** fehlende oder doppelte Events, gleiche Zeitstempel, technische
-  Statuswechsel. Gegenmaßnahme: `step_no` als Tie-Breaker, technische Events in der View
-  herausfiltern, Status-Mapping pflegen.
-* **Laufende Vorgänge** verfälschen „Kein gültiger Abschluss“ und Konformität (Klärungspunkt 5).
-* **Technische Accounts** (`system`, Service Principals) können Funktionstrennungs-Regeln
-  scheinbar erfüllen oder verletzen. Je Regel festlegen, wie sie zählen.
+* **Inkrementelle Übernahme:** nie „`seq` > Maximum“, sondern mit Überlappungsfenster und
+  Deduplizierung (siehe 6.2).
+* **Last auf PostgreSQL:** Der Foreign Catalog liest live, deshalb auf ein Read-Replica zeigen. Das
+  Dashboard liest nur Delta-Marts.
+* **Laufende Vorgänge** verfälschen „Kein gültiger Abschluss“ und die Konformität (Klärungspunkt 4).
+* **Technische Accounts** (`system`, Service-Accounts) bei der Funktionstrennung je Regel festlegen.
 * **Versionierung** (Data Contracts): Ist ein Vorgang ein Contract über alle Versionen oder eine
-  Änderung? Die Wahl beeinflusst Rücksprünge und Fristen.
-* **`.lvdash.json` ist undokumentiert** und **Custom Viz ist Public Preview.** Nach manuellem
-  Aufbau den echten Export versionieren.
-* **Feldnamen in Custom Viz** müssen exakt stimmen und dürfen nicht aggregiert sein.
-* **Inkrementelle Übernahme aus PostgreSQL:** Eine Kopie nach „`seq` > zuletzt gesehen“ verliert
-  Zeilen, wenn eine kleinere `seq` später committet (parallele Transaktionen). Deshalb Kopie ab
-  `recorded_at` − 15 Minuten mit Deduplizierung über `event_id`. Längere Transaktionen im Data
-  Manager vermeiden oder das Fenster vergrößern. Belegt durch `test_watermark_overlap_catches_late_commit`.
-* **Last auf der Produktivdatenbank:** Federation-Abfragen gehen gegen PostgreSQL. Den Kopier-Job
-  auf ein Read-Replica zeigen lassen; das Dashboard liest nur aus Delta.
-* **Selbstprüfung vermeiden:** Soll-Modell und Status-Maschine dürfen nicht aus derselben Quelle
-  stammen. Änderungen am Soll-Modell brauchen eine Freigabe durch die Governance.
-* **Gültigkeitszeiträume** in `system_allowed_transitions` dürfen sich je Übergang nicht
-  überlappen (sonst doppelte Zeilen in `v_transitions`).
-* **Personenbezug:** `actor` und `initiator` sind personenbezogene Daten. Zugriff auf Dashboard
-  und Datasets beschränken und ggf. pseudonymisieren.
+  Änderung? Einmal festlegen.
+* **Selbstprüfung vermeiden:** Soll-Modell (Governance) und Status-Maschine (Code) bleiben getrennt.
+* **Undokumentiert bzw. Preview:** Das `.lvdash.json`-Format, Custom Viz und die
+  Dashboard-Felder `dataset_catalog`/`dataset_schema` im Bundle sind nicht offiziell dokumentiert
+  oder noch in Preview. Den echten Export versionieren.
+* **dbt lokal vs. Databricks:** Lokal läuft `dbt-spark` (Session) auf Spark 4.0.1 mit Delta 4.0.
+  Produktiv läuft `dbt-databricks`. Die Modelle nutzen nur gemeinsame Spark-SQL-Funktionen und
+  Konfigurationen (`file_format: delta`, `merge`). Der erste Lauf im Workspace ist trotzdem zu
+  prüfen.
+* **Personenbezug:** `actor` und `initiator` sind personenbezogen. Zugriff auf Foreign Catalog,
+  Marts und Dashboard beschränken.
 
 ---
 
-## 12. Mögliche Erweiterungen (nicht Teil des ersten Auftrags)
+## 11. Lokal prüfen
 
-* Weitere Prozesse: **Change Approval**, **kanonische Datenmodelle**, Applikations-Onboarding,
-  **Rezertifizierung und Entzug von Zugriffen** (wichtig für Audits).
-* Fristverletzungen für **offene** Vorgänge; Erinnerung vor Fristablauf.
-* **Verknüpfung mit Application Monitoring:** gemeinsame Vorgangs- oder Trace-ID in Workflow-Events
-  und Applikations-Logs. Dann lässt sich unterscheiden, ob ein fehlender Schritt eine Lücke in
-  der Applikation ist oder ein technischer Fehler.
-* **Audit-Export** je Befund (Vorgänge, Personen, Zeitstempel) als Nachweis.
-* Ticket automatisch anlegen (z. B. Jira) bei neuem kritischem Befund.
+`bash tools/verify_all.sh`, optional mit `DM_TEST_PG_DSN`. Die Schritte:
+1. pytest des Data-Manager-Pakets,
+2. CI-Check,
+3. `dbt build` mit Beispieldaten (`tools/run_dbt_local.sh`, lädt die Delta-JARs beim ersten Lauf),
+4. Export von `mart_process_graph` und Render-Check (`tools/check_vega_spec.mjs`).
 
----
-
-## 13. Lokal testen ohne Workspace
-
-**Alles auf einmal:** `bash tools/verify_all.sh`. Das Skript führt pytest, den CI-Check,
-`tools/local_sql_check.py` (alle Abnahmewerte aus Abschnitt 10 als Assertions, schreibt
-`build/graph_*.json`) und `tools/check_vega_spec.mjs` (Render-Check ohne Warnungen) aus. Für
-den Einstieg des implementierenden Agenten siehe [`AGENTS.md`](AGENTS.md).
-
-Einzeln:
-
-* **Python-Paket:** `pip install -e ./python[test] && pytest python/tests`. Mit PostgreSQL:
-  `DM_TEST_PG_DSN=postgresql://user@host:5432/testdb pytest python/tests` (Datenbank in UTF-8, wird
-  verändert, nur Testdatenbanken!).
-* **SQL:** PySpark 4.x; `main.data_manager_pm.` durch ein lokales Schema ersetzen, `CREATE OR
-  REPLACE TABLE` durch `CREATE TABLE`; Parameter über
-  `spark.sql(q, args={"process": "Access Request", "domain": "Alle"})`.
-* **Vega-Lite:** `npm i vega vega-lite` (v5 und v6). `data` durch `{"values": [...]}` ersetzen,
-  Höhe = Breite × (frame-y / 800), mit `vl.compile` + `new vega.View(...).toSVG()` rendern.
-  Warnungen müssen leer sein.
-* **Gesamtbild:** `dashboard.html` öffnen. Die Datei funktioniert offline; `#Data%20Contract` in
-  der URL öffnet direkt die Detailseite.
+Benötigte Pakete:
+- Python: `pytest`, `psycopg[binary]`, `dbt-core>=1.10`, `dbt-spark[session]>=1.9`, `pyspark==4.0.1`,
+- außerdem Java 17+ und Node 18+ (`cd tools && npm install`).

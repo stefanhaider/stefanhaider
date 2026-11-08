@@ -1,0 +1,32 @@
+SELECT * FROM VALUES
+  ('2026.1', 'Access Request', '▶ Start',                  0, false, false),
+  ('2026.1', 'Access Request', 'Beantragt',                1, false, false),
+  ('2026.1', 'Access Request', 'Prüfung Data Owner',       2, false, true),
+  ('2026.1', 'Access Request', 'Prüfung Security',         3, false, true),
+  ('2026.1', 'Access Request', 'Berechtigung erteilt',     4, false, false),
+  ('2026.1', 'Access Request', 'Abgelehnt',               90, true,  false),
+  ('2026.1', 'Access Request', '■ Ende',                  99, true,  false),
+
+  ('2026.1', 'Data Contract',  '▶ Start',                  0, false, false),
+  ('2026.1', 'Data Contract',  'Entwurf erstellt',         1, false, false),
+  ('2026.1', 'Data Contract',  'Schema validiert',         2, false, true),
+  ('2026.1', 'Data Contract',  'Review Data Owner',        3, false, true),
+  ('2026.1', 'Data Contract',  'Freigegeben',              4, false, false),
+  ('2026.1', 'Data Contract',  'Aktiv',                    5, false, false),
+  ('2026.1', 'Data Contract',  'Änderung beantragt',       6, false, false),
+  ('2026.1', 'Data Contract',  'Schema erneut validiert',  7, false, true),
+  ('2026.1', 'Data Contract',  'Review Änderung',          8, false, true),
+  ('2026.1', 'Data Contract',  'Neue Version aktiv',       9, false, false),
+  ('2026.1', 'Data Contract',  'Verworfen',               90, true,  false),
+  ('2026.1', 'Data Contract',  '■ Ende',                  99, true,  false),
+
+  ('2026.1', 'Data Product',   '▶ Start',                  0, false, false),
+  ('2026.1', 'Data Product',   'Angelegt',                 1, false, false),
+  ('2026.1', 'Data Product',   'Metadaten erfasst',        2, false, false),
+  ('2026.1', 'Data Product',   'Data Contract verknüpft',  3, false, true),
+  ('2026.1', 'Data Product',   'Qualitätsprüfung',         4, false, true),
+  ('2026.1', 'Data Product',   'Freigabe Data Owner',      5, false, true),
+  ('2026.1', 'Data Product',   'Veröffentlicht',           6, false, false),
+  ('2026.1', 'Data Product',   'Abgelehnt',               90, true,  false),
+  ('2026.1', 'Data Product',   '■ Ende',                  99, true,  false)
+AS t(model_version, process, activity, step_order, is_terminal, is_control)

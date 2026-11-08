@@ -1,0 +1,52 @@
+# Databricks Asset Bundle: Prozess- & Governance-Monitoring des Data Managers.
+# Eigenständiges Databricks-Projekt – unabhängig von der Applikation Data Manager.
+# Einzige Verbindung: die Daten des Data Managers, per Unity Catalog als Foreign Catalog eingebunden
+# (setup/01_unity_catalog_connection.sql, einmalig durch einen Admin).
+#
+#   databricks bundle validate -t dev
+#   databricks bundle deploy   -t dev
+#   databricks bundle run      -t dev process_monitoring_refresh
+bundle:
+  name: process_monitoring
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Unity-Catalog-Katalog für das Data Product
+    default: main
+  schema:
+    description: Schema des Data Products (dbt-Ziel)
+    default: process_monitoring
+  dm_catalog:
+    description: Foreign Catalog auf die PostgreSQL-Datenbank des Data Managers
+    default: dm_pg
+  warehouse_id:
+    description: SQL Warehouse für dbt, Dashboard und Alarm-Task
+  use_sample_data:
+    description: true = Data Product mit eingebauten Beispieldaten bauen (ohne Data Manager; nur dev)
+    default: false
+  alert_emails:
+    description: Empfänger des Alarms (kommagetrennt bzw. Liste je Target)
+    type: complex
+    default: []
+
+targets:
+  dev:
+    mode: development          # Ressourcen mit Präfix, Zeitpläne pausiert
+    default: true
+    workspace:
+      host: https://<dev-workspace>.cloud.databricks.com
+    variables:
+      schema: process_monitoring_dev
+      use_sample_data: true      # bis der Foreign Catalog eingerichtet ist (AP5), danach false (AP7)
+  prod:
+    mode: production
+    workspace:
+      host: https://<prod-workspace>.cloud.databricks.com
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: <service-principal-application-id>
+    variables:
+      schema: process_monitoring

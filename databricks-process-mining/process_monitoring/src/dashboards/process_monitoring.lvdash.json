@@ -1,0 +1,2197 @@
+{
+  "datasets": [
+    {
+      "name": "case_conformance",
+      "displayName": "Vorgänge (Konformität)",
+      "queryLines": [
+        "SELECT * FROM mart_case_conformance\n"
+      ]
+    },
+    {
+      "name": "findings",
+      "displayName": "Befunde (Vorkommen)",
+      "queryLines": [
+        "SELECT * FROM mart_findings\n"
+      ]
+    },
+    {
+      "name": "findings_summary",
+      "displayName": "Befunde (Zusammenfassung je Domäne)",
+      "queryLines": [
+        "SELECT * FROM mart_findings_summary\n"
+      ]
+    },
+    {
+      "name": "system_conformance",
+      "displayName": "Soll · System · Ist",
+      "queryLines": [
+        "SELECT * FROM mart_system_conformance\n"
+      ]
+    },
+    {
+      "name": "rejected_attempts",
+      "displayName": "Abgewiesene Versuche",
+      "queryLines": [
+        "SELECT * FROM mart_rejected_attempts\n"
+      ]
+    },
+    {
+      "name": "process_graph",
+      "displayName": "Prozessgraph (Custom Viz)",
+      "queryLines": [
+        "SELECT * FROM mart_process_graph\n"
+      ]
+    },
+    {
+      "name": "alert",
+      "displayName": "Alarm: kritische Befunde",
+      "queryLines": [
+        "SELECT * FROM mart_alert_critical_findings\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "uebersicht",
+      "displayName": "Übersicht",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_domain",
+            "queries": [
+              {
+                "name": "f_case_conformance",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "domain",
+                      "expression": "`domain`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_findings",
+                "query": {
+                  "datasetName": "findings",
+                  "fields": [
+                    {
+                      "name": "domain",
+                      "expression": "`domain`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "domain",
+                    "displayName": "Datendomäne (Vorgänge)",
+                    "queryName": "f_case_conformance"
+                  },
+                  {
+                    "fieldName": "domain",
+                    "displayName": "Datendomäne (Vorgänge)",
+                    "queryName": "f_findings"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Datendomäne (Vorgänge)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_scope",
+            "queries": [
+              {
+                "name": "f_findings_summary",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "domain_scope",
+                      "expression": "`domain_scope`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "domain_scope",
+                    "displayName": "Datendomäne (Befund-Übersicht)",
+                    "queryName": "f_findings_summary"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Datendomäne (Befund-Übersicht)"
+              },
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "Alle"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "o_cases",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "n",
+                      "expression": "COUNT(`case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "n",
+                  "displayName": "Vorgänge"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "o_rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "rate",
+                      "expression": "ROUND(AVG(`is_conformant`) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "rate",
+                  "displayName": "Prozesskonformität (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozesskonformität (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "o_comp",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "comp",
+                      "expression": "ROUND(AVG(`is_compliant`) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "comp",
+                  "displayName": "Governance-konform (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Governance-konform (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "o_crit",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "crit",
+                      "expression": "SUM(`has_critical`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "crit",
+                  "displayName": "Vorgänge mit kritischem Befund"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge mit kritischem Befund"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "o_active",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "active",
+                      "expression": "COUNT_IF(`severity` = 'kritisch' AND `status` <> 'nicht mehr aufgetreten')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "active",
+                  "displayName": "Aktive kritische Befunde"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Aktive kritische Befunde"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "o_new",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "new",
+                      "expression": "COUNT_IF(`status` = 'neu')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "new",
+                  "displayName": "Neue Befunde (8 Wochen)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Neue Befunde (8 Wochen)"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "o_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "monthly(case_start)",
+                      "expression": "DATE_TRUNC(\"MONTH\", `case_start`)"
+                    },
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "rate",
+                      "expression": "AVG(`is_conformant`) * 100"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "monthly(case_start)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Startmonat"
+                },
+                "y": {
+                  "fieldName": "rate",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Prozesskonformität (%)"
+                },
+                "color": {
+                  "fieldName": "process",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Prozess"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozesskonformität je Startmonat"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "o_types",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "COUNT(DISTINCT `case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "cases",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Vorgänge"
+                },
+                "y": {
+                  "fieldName": "finding_type",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Befund-Typ"
+                },
+                "color": {
+                  "fieldName": "process",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Prozess"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Betroffene Vorgänge je Prozess und Befund-Typ"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "o_actions",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "finding",
+                      "expression": "`finding`"
+                    },
+                    {
+                      "name": "cases_last_4w",
+                      "expression": "`cases_last_4w`"
+                    },
+                    {
+                      "name": "pct_last_4w",
+                      "expression": "`pct_last_4w`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "`cases`"
+                    },
+                    {
+                      "name": "first_seen",
+                      "expression": "`first_seen`"
+                    },
+                    {
+                      "name": "last_seen",
+                      "expression": "`last_seen`"
+                    },
+                    {
+                      "name": "process_owner",
+                      "expression": "`process_owner`"
+                    },
+                    {
+                      "name": "recommended_action",
+                      "expression": "`recommended_action`"
+                    },
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    },
+                    {
+                      "name": "first_release",
+                      "expression": "`first_release`"
+                    },
+                    {
+                      "name": "system_status",
+                      "expression": "`system_status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "severity",
+                    "displayName": "Schwere"
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "finding_type",
+                    "displayName": "Befund-Typ"
+                  },
+                  {
+                    "fieldName": "finding",
+                    "displayName": "Befund"
+                  },
+                  {
+                    "fieldName": "system_status",
+                    "displayName": "System-Status"
+                  },
+                  {
+                    "fieldName": "first_release",
+                    "displayName": "Seit Release"
+                  },
+                  {
+                    "fieldName": "channels",
+                    "displayName": "Kanäle"
+                  },
+                  {
+                    "fieldName": "cases_last_4w",
+                    "displayName": "Letzte 4 Wochen"
+                  },
+                  {
+                    "fieldName": "pct_last_4w",
+                    "displayName": "Anteil letzte 4 Wochen (%)"
+                  },
+                  {
+                    "fieldName": "cases",
+                    "displayName": "Gesamt"
+                  },
+                  {
+                    "fieldName": "first_seen",
+                    "displayName": "Erstmals"
+                  },
+                  {
+                    "fieldName": "last_seen",
+                    "displayName": "Zuletzt"
+                  },
+                  {
+                    "fieldName": "process_owner",
+                    "displayName": "Verantwortlich"
+                  },
+                  {
+                    "fieldName": "recommended_action",
+                    "displayName": "Empfohlene Maßnahme"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Handlungsbedarf – aktive Governance-Befunde (Filter: Status ≠ „nicht mehr aufgetreten“)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 6,
+            "height": 9
+          }
+        },
+        {
+          "widget": {
+            "name": "o_cases_t",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "case_id",
+                      "expression": "`case_id`"
+                    },
+                    {
+                      "name": "domain",
+                      "expression": "`domain`"
+                    },
+                    {
+                      "name": "initiator",
+                      "expression": "`initiator`"
+                    },
+                    {
+                      "name": "case_start",
+                      "expression": "`case_start`"
+                    },
+                    {
+                      "name": "findings",
+                      "expression": "`findings`"
+                    },
+                    {
+                      "name": "has_critical",
+                      "expression": "`has_critical`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "case_id",
+                    "displayName": "Vorgang"
+                  },
+                  {
+                    "fieldName": "domain",
+                    "displayName": "Domäne"
+                  },
+                  {
+                    "fieldName": "initiator",
+                    "displayName": "Gestartet von"
+                  },
+                  {
+                    "fieldName": "case_start",
+                    "displayName": "Start"
+                  },
+                  {
+                    "fieldName": "findings",
+                    "displayName": "Befunde"
+                  },
+                  {
+                    "fieldName": "has_critical",
+                    "displayName": "Kritisch (1/0)"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge mit kritischem Befund (Filter: has_critical = 1)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 21,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "prozessdetail",
+      "displayName": "Prozessdetail",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_process",
+            "queries": [
+              {
+                "name": "f_case_conformance",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_findings",
+                "query": {
+                  "datasetName": "findings",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_findings_summary",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_process_graph",
+                "query": {
+                  "datasetName": "process_graph",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_case_conformance"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_findings"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_findings_summary"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_process_graph"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozess"
+              },
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "Access Request"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_domain_d",
+            "queries": [
+              {
+                "name": "f_findings_summary",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "domain_scope",
+                      "expression": "`domain_scope`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_process_graph",
+                "query": {
+                  "datasetName": "process_graph",
+                  "fields": [
+                    {
+                      "name": "domain_scope",
+                      "expression": "`domain_scope`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "domain_scope",
+                    "displayName": "Datendomäne",
+                    "queryName": "f_findings_summary"
+                  },
+                  {
+                    "fieldName": "domain_scope",
+                    "displayName": "Datendomäne",
+                    "queryName": "f_process_graph"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Datendomäne"
+              },
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "Alle"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "d_cases",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "n",
+                      "expression": "COUNT(`case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "n",
+                  "displayName": "Vorgänge"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_rate",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "rate",
+                      "expression": "ROUND(AVG(`is_conformant`) * 100, 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "rate",
+                  "displayName": "Prozesskonformität (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozesskonformität (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_bypass",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "bypass",
+                      "expression": "SUM(`has_control_bypass`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "bypass",
+                  "displayName": "Kontrolle umgangen"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Kontrolle umgangen"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_sod",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "sod",
+                      "expression": "SUM(`has_sod_violation`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sod",
+                  "displayName": "Funktionstrennung verletzt"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Funktionstrennung verletzt"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_sla",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "sla",
+                      "expression": "SUM(`has_sla_breach`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sla",
+                  "displayName": "Frist überschritten"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Frist überschritten"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_days",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "days",
+                      "expression": "ROUND(AVG(`throughput_days`), 1)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "days",
+                  "displayName": "Ø Durchlaufzeit (Tage)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Ø Durchlaufzeit (Tage)"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "d_graph_hint",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### Soll-Ist-Prozessgraph\n",
+                "Custom Viz einfügen: Dataset `process_graph` (mart_process_graph), Spezifikation aus `process_graph.vl.json`. Prozess- und Domänen-Filter wirken über die Felder `process` und `domain_scope`. Danach Dashboard exportieren (`databricks bundle generate dashboard`).\n"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 14
+          }
+        },
+        {
+          "widget": {
+            "name": "d_trend",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "weekly(case_start)",
+                      "expression": "DATE_TRUNC(\"WEEK\", `case_start`)"
+                    },
+                    {
+                      "name": "rate",
+                      "expression": "AVG(`is_conformant`) * 100"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "weekly(case_start)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Startwoche"
+                },
+                "y": {
+                  "fieldName": "rate",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Prozesskonformität (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozesskonformität je Startwoche"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "d_types",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings",
+                  "fields": [
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "COUNT(DISTINCT `case_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "cases",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Vorgänge"
+                },
+                "y": {
+                  "fieldName": "finding_type",
+                  "scale": {
+                    "type": "categorical",
+                    "sort": {
+                      "by": "x-reversed"
+                    }
+                  },
+                  "displayName": "Befund-Typ"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Betroffene Vorgänge je Befund-Typ"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 12,
+            "width": 3,
+            "height": 7
+          }
+        },
+        {
+          "widget": {
+            "name": "d_findings",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "findings_summary",
+                  "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "finding",
+                      "expression": "`finding`"
+                    },
+                    {
+                      "name": "cases_last_4w",
+                      "expression": "`cases_last_4w`"
+                    },
+                    {
+                      "name": "pct_last_4w",
+                      "expression": "`pct_last_4w`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "`cases`"
+                    },
+                    {
+                      "name": "first_seen",
+                      "expression": "`first_seen`"
+                    },
+                    {
+                      "name": "last_seen",
+                      "expression": "`last_seen`"
+                    },
+                    {
+                      "name": "process_owner",
+                      "expression": "`process_owner`"
+                    },
+                    {
+                      "name": "recommended_action",
+                      "expression": "`recommended_action`"
+                    },
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    },
+                    {
+                      "name": "first_release",
+                      "expression": "`first_release`"
+                    },
+                    {
+                      "name": "system_status",
+                      "expression": "`system_status`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "severity",
+                    "displayName": "Schwere"
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "finding_type",
+                    "displayName": "Befund-Typ"
+                  },
+                  {
+                    "fieldName": "finding",
+                    "displayName": "Befund"
+                  },
+                  {
+                    "fieldName": "system_status",
+                    "displayName": "System-Status"
+                  },
+                  {
+                    "fieldName": "first_release",
+                    "displayName": "Seit Release"
+                  },
+                  {
+                    "fieldName": "channels",
+                    "displayName": "Kanäle"
+                  },
+                  {
+                    "fieldName": "cases_last_4w",
+                    "displayName": "Letzte 4 Wochen"
+                  },
+                  {
+                    "fieldName": "pct_last_4w",
+                    "displayName": "Anteil letzte 4 Wochen (%)"
+                  },
+                  {
+                    "fieldName": "cases",
+                    "displayName": "Gesamt"
+                  },
+                  {
+                    "fieldName": "first_seen",
+                    "displayName": "Erstmals"
+                  },
+                  {
+                    "fieldName": "last_seen",
+                    "displayName": "Zuletzt"
+                  },
+                  {
+                    "fieldName": "process_owner",
+                    "displayName": "Verantwortlich"
+                  },
+                  {
+                    "fieldName": "recommended_action",
+                    "displayName": "Empfohlene Maßnahme"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Befunde – lässt die Applikation das noch zu?"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 19,
+            "width": 6,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "d_cases_t",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "case_conformance",
+                  "fields": [
+                    {
+                      "name": "case_id",
+                      "expression": "`case_id`"
+                    },
+                    {
+                      "name": "domain",
+                      "expression": "`domain`"
+                    },
+                    {
+                      "name": "initiator",
+                      "expression": "`initiator`"
+                    },
+                    {
+                      "name": "case_start",
+                      "expression": "`case_start`"
+                    },
+                    {
+                      "name": "throughput_days",
+                      "expression": "`throughput_days`"
+                    },
+                    {
+                      "name": "findings",
+                      "expression": "`findings`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "case_id",
+                    "displayName": "Vorgang"
+                  },
+                  {
+                    "fieldName": "domain",
+                    "displayName": "Domäne"
+                  },
+                  {
+                    "fieldName": "initiator",
+                    "displayName": "Gestartet von"
+                  },
+                  {
+                    "fieldName": "case_start",
+                    "displayName": "Start"
+                  },
+                  {
+                    "fieldName": "throughput_days",
+                    "displayName": "Durchlaufzeit (Tage)"
+                  },
+                  {
+                    "fieldName": "findings",
+                    "displayName": "Befunde"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Betroffene Vorgänge (Filter: findings ≠ '')"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 27,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "systemkonformitaet",
+      "displayName": "System-Konformität",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_process_s",
+            "queries": [
+              {
+                "name": "f_sys",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_rej",
+                "query": {
+                  "datasetName": "rejected_attempts",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_sys"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_rej"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozess"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "s_trans",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "n",
+                      "expression": "COUNT_IF(`in_system`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "n",
+                  "displayName": "Übergänge im System"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Übergänge im System"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_more",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "more",
+                      "expression": "COUNT_IF(`system_category` LIKE 'System lässt mehr zu%')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "more",
+                  "displayName": "System lässt mehr zu"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "System lässt mehr zu"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_miss",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "miss",
+                      "expression": "COUNT_IF(`system_category` = 'Soll-Schritt nicht implementiert')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "miss",
+                  "displayName": "Soll nicht implementiert"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Soll nicht implementiert"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_out",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "out",
+                      "expression": "SUM(`cases_outside_workflow`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "out",
+                  "displayName": "Vorgänge außerhalb des Workflows"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge außerhalb des Workflows"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_rej",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "rejected_attempts",
+                  "fields": [
+                    {
+                      "name": "rej",
+                      "expression": "COUNT(*)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "rej",
+                  "displayName": "Abgewiesene Versuche"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Abgewiesene Versuche"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_latent",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "lat",
+                      "expression": "COUNT_IF(`system_category` = 'System lässt mehr zu – latent')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "lat",
+                  "displayName": "Latente Lücken"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Latente Lücken"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "system_category",
+                      "expression": "`system_category`"
+                    },
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "transition",
+                      "expression": "`transition`"
+                    },
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "skipped_controls",
+                      "expression": "`skipped_controls`"
+                    },
+                    {
+                      "name": "in_soll",
+                      "expression": "`in_soll`"
+                    },
+                    {
+                      "name": "in_system",
+                      "expression": "`in_system`"
+                    },
+                    {
+                      "name": "system_note",
+                      "expression": "`system_note`"
+                    },
+                    {
+                      "name": "since_release",
+                      "expression": "`since_release`"
+                    },
+                    {
+                      "name": "observed_cases",
+                      "expression": "`observed_cases`"
+                    },
+                    {
+                      "name": "cases_outside_workflow",
+                      "expression": "`cases_outside_workflow`"
+                    },
+                    {
+                      "name": "rejected_attempts",
+                      "expression": "`rejected_attempts`"
+                    },
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "severity",
+                    "displayName": "Schwere"
+                  },
+                  {
+                    "fieldName": "system_category",
+                    "displayName": "Kategorie"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "transition",
+                    "displayName": "Übergang"
+                  },
+                  {
+                    "fieldName": "finding_type",
+                    "displayName": "Befund-Typ"
+                  },
+                  {
+                    "fieldName": "skipped_controls",
+                    "displayName": "Umgangene Kontrollen"
+                  },
+                  {
+                    "fieldName": "in_soll",
+                    "displayName": "Soll"
+                  },
+                  {
+                    "fieldName": "in_system",
+                    "displayName": "System"
+                  },
+                  {
+                    "fieldName": "system_note",
+                    "displayName": "System-Hinweis"
+                  },
+                  {
+                    "fieldName": "since_release",
+                    "displayName": "Seit Release"
+                  },
+                  {
+                    "fieldName": "observed_cases",
+                    "displayName": "Ist (Vorgänge)"
+                  },
+                  {
+                    "fieldName": "cases_outside_workflow",
+                    "displayName": "davon außerhalb"
+                  },
+                  {
+                    "fieldName": "rejected_attempts",
+                    "displayName": "Abgewiesen"
+                  },
+                  {
+                    "fieldName": "channels",
+                    "displayName": "Kanäle"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Soll · System · Ist je Übergang (Filter: system_category ≠ Konform)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "s_rejected",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "rejected_attempts",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "case_id",
+                      "expression": "`case_id`"
+                    },
+                    {
+                      "name": "attempt",
+                      "expression": "`attempt`"
+                    },
+                    {
+                      "name": "attempted_transition",
+                      "expression": "`attempted_transition`"
+                    },
+                    {
+                      "name": "actor",
+                      "expression": "`actor`"
+                    },
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "app_version",
+                      "expression": "`app_version`"
+                    },
+                    {
+                      "name": "event_ts",
+                      "expression": "`event_ts`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "case_id",
+                    "displayName": "Vorgang"
+                  },
+                  {
+                    "fieldName": "attempt",
+                    "displayName": "Versuch"
+                  },
+                  {
+                    "fieldName": "attempted_transition",
+                    "displayName": "Übergang"
+                  },
+                  {
+                    "fieldName": "actor",
+                    "displayName": "Person"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "displayName": "Kanal"
+                  },
+                  {
+                    "fieldName": "app_version",
+                    "displayName": "Release"
+                  },
+                  {
+                    "fieldName": "event_ts",
+                    "displayName": "Zeitpunkt"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vom System abgewiesene Versuche"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 3,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "s_channels",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "SUM(`observed_cases`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "cases",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Vorgänge"
+                },
+                "y": {
+                  "fieldName": "channels",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Kanal"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Übergänge nach Kanal (Filter: system_category ≠ Konform)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 15,
+            "width": 3,
+            "height": 8
+          }
+        }
+      ]
+    }
+  ]
+}

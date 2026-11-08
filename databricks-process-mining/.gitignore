@@ -3,3 +3,9 @@ __pycache__/
 .pytest_cache/
 build/
 tools/node_modules/
+tools/.jars/
+process_monitoring/dbt/target/
+process_monitoring/dbt/logs/
+process_monitoring/dbt/dbt_packages/
+process_monitoring/.databricks/
+process_monitoring/dbt/profiles/.user.yml

@@ -1,0 +1,10 @@
+version: 2
+seeds:
+  - name: finding_severity
+    description: Schweregrad und empfohlene Maßnahme je Befund-Typ (Konfiguration des Data Products)
+    config:
+      column_types: {finding_type: string, severity: string, severity_rank: int, recommended_action: string}
+  - name: process_graph_layout
+    description: Position der Aktivitäten im Prozessgraphen (Raster 800 breit, y nach unten)
+    config:
+      column_types: {process: string, activity: string, x: double, y: double}

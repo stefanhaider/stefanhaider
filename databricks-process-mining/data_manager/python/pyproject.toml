@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "datamanager-governance"
+version = "0.1.0"
+description = "Prozess-Events, Status-Maschine und Konformitäts-Check für den Data Manager"
+requires-python = ">=3.10"
+dependencies = []          # Kern nur mit Standardbibliothek
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.1"]
+test = ["pytest>=8", "psycopg[binary]>=3.1"]
+
+[project.scripts]
+dm-export-workflow = "datamanager_governance.export:main"
+dm-check-workflow = "datamanager_governance.conformance:main"
+dm-sync-governance = "datamanager_governance.governance_sync:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

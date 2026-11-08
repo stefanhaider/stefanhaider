@@ -7,115 +7,121 @@
 ## 1. Deine Rolle und dein Ziel
 
 Du implementierst ein **Prozess- und Governance-Monitoring für den „Data Manager“**, die selbst
-entwickelte Data-Governance- bzw. Data-Mesh-Applikation des Auftraggebers (Python). Sie
-verwaltet Datenkatalog, Data Contracts, Data Products, Access Requests, Change Approvals und
-kanonische Datenmodelle.
+entwickelte Data-Governance- bzw. Data-Mesh-Applikation des Auftraggebers. Der Data Manager hat
+ein Python-Backend, ein Vue.js-Frontend und eine PostgreSQL-Datenbank. Er verwaltet Datenkatalog,
+Data Contracts, Data Products, Access Requests, Change Approvals und kanonische Datenmodelle.
 
-Das Ergebnis beantwortet vier Fragen:
+Es sind **zwei getrennte Teile**:
 
-1. Werden die Soll-Prozesse eingehalten?
-2. Lässt der Data Manager Wege zu, die er nicht zulassen sollte (umgangene Kontrollen)?
-3. Werden Governance-Regeln verletzt (Funktionstrennung, Fristen)?
-4. Passt die Status-Maschine des Systems zum Soll-Prozess? Auch vor jedem Release als CI-Check.
+| Teil | Ordner | Läuft wo | Aufgabe |
+|---|---|---|---|
+| **1. Data Manager** | `data_manager/` | Repository und Datenbank der Applikation | erzeugt **alle Daten** fürs Monitoring: Footprints, Status-Maschine je Release, Soll-Modell, Regeln, Owner. Dazu CI-Check und Vue-Regeln |
+| **2. Data Product** | `process_monitoring/` | eigenes **Databricks Asset Bundle**, **unabhängig** vom Data Manager | **dbt-Projekt = Data Product**, Dashboards, Jobs, Alarm. Liest **nur** über Unity Catalog (Foreign Catalog) |
 
-**Zielplattform:** Databricks (Delta, Views, SQL Warehouse, AI/BI Dashboard mit Custom Viz,
-SQL Alerts) und das Python-Repository des Data Managers.
-
-Der Ordner enthält einen **vollständigen, lokal geprüften Referenzstand**. Deine Aufgabe ist,
-ihn **in die echte Umgebung zu bringen und auf echte Daten umzustellen**, nicht ihn neu zu
-erfinden.
+Der Ordner enthält einen **vollständigen, lokal geprüften Referenzstand**. Deine Aufgabe ist, ihn in
+die echten Umgebungen zu bringen und auf echte Daten umzustellen, nicht ihn neu zu erfinden.
 
 ## 2. Lesereihenfolge
 
 1. Diese Datei
-2. [`IMPLEMENTATION_SPEC.md`](IMPLEMENTATION_SPEC.md): Regeln, Datenformate, Dashboard,
-   Abnahmewerte, Risiken
-3. [`EVENT_STANDARD.md`](EVENT_STANDARD.md): Event-Format und Einbindung in den Data Manager
-4. `dashboard.html` im Browser (offline lauffähig): **Zielbild der Oberfläche**; Seiten
-   „Übersicht“, „Prozessdetail“ und „System-Konformität“
-5. Code: `02_process_model.sql` → `03_views.sql` → `04_…` bis `10_…` → `python/` → `ci/`
+2. [`IMPLEMENTATION_SPEC.md`](IMPLEMENTATION_SPEC.md): Architektur, Regeln, Dashboard, Abnahmewerte, Risiken
+3. [`EVENT_STANDARD.md`](EVENT_STANDARD.md): Event-Format, Einbindung in den Data Manager
+4. `mockup/dashboard.html` im Browser (offline): **Zielbild** der drei Dashboard-Seiten
+5. `data_manager/README.md` und `data_manager/frontend/README.md`
+6. `process_monitoring/README.md`, danach `dbt/models/` (staging → intermediate → marts)
 
 ## 3. Leitplanken (nicht verhandelbar)
 
-* **Keine Databricks App.** Nur Delta-Tabellen, Views, AI/BI Dashboard, Custom Viz, SQL Alerts
-  und Jobs.
-* **Keine Heatmap oder Übergangsmatrix, kein Sankey** im Dashboard.
-* **Der Soll-Prozess wird nie aus dem Code erzeugt.** `governance_model.json` bzw. die Tabellen
-  `process_model_*` gehören der Governance. Die Status-Maschine (`python/…/workflows.py`,
-  `system_allowed_transitions`) gehört der Entwicklung. Beide bleiben getrennt.
-* **Logik nur an einer Stelle:**
-  - Klassifizierungsregeln in `v_transition_classes` (SQL) und `conformance.classify()` (Python),
-    beide identisch halten,
-  - Konfiguration nur in `02_process_model.sql` bzw. den JSON-Dateien in `config/`.
-* **Statuswechsel im Data Manager nur über `StateMachine.transition()`.** Abgewiesene Versuche
-  über `reject_sink` in eigener Transaktion.
-* **`governance.process_event` bleibt append-only.** Den Trigger nicht entfernen und der App
-  keine UPDATE- oder DELETE-Rechte geben. Databricks liest mit einem read-only User, möglichst
-  vom Read-Replica.
-* **Keine Produktionsänderungen ohne Freigabe:** Kein Deploy in Produktion, kein Löschen oder
-  Überschreiben echter Tabellen, keine Änderung an Berechtigungen und kein Versand von Alerts an
-  echte Empfänger, ohne dass der Auftraggeber zugestimmt hat. Arbeite zuerst in einem Dev-Schema.
+* **Trennung der Teile:** Das Databricks-Projekt hat **keine** Code- oder Laufzeitabhängigkeit zum
+  Data Manager. Die einzige Schnittstelle sind die Tabellen in `governance.*`, gelesen per Foreign
+  Catalog. Kein Aufruf von Data-Manager-APIs aus Databricks und kein Schreiben in den Data Manager.
+* **Data Product = dbt-Projekt.** Alle Datenmodelle für Dashboards sind dbt-Modelle in
+  `process_monitoring/dbt/`, inklusive Tests. Keine handgepflegten Views oder Tabellen daneben.
+* **Alles in Databricks als Bundle:** Jobs, Dashboard und Konfiguration sind in
+  `process_monitoring/` versioniert und werden per `databricks bundle deploy` ausgerollt.
+  Ausnahme: das einmalige Unity-Catalog-Setup (Connection), das Admin-Rechte braucht.
+* **Keine Databricks App, keine Heatmap oder Übergangsmatrix, kein Sankey.**
+* **Der Soll-Prozess wird nie aus dem Code erzeugt.** `governance_model.json` gehört der Governance
+  (CODEOWNERS). Die Status-Maschine (`workflows.py`) gehört der Entwicklung.
+* **Logik nur an einer Stelle:** Die Klassifizierung steht in `int_transition_classes` (dbt) und
+  `conformance.classify()` (Python). Beide bleiben identisch.
+* **Statuswechsel nur über `StateMachine.transition()`.** Die Vue-UI zeigt nur Aktionen aus
+  `allowed_next()`. Abgewiesene Versuche gehen über `reject_sink` in eine eigene Transaktion.
+* **`governance.process_event` bleibt append-only** (Trigger, Rechte). Databricks liest mit einem
+  read-only User, möglichst vom Read-Replica.
+* **Keine Produktionsänderungen ohne Freigabe:** kein Deploy auf `prod`, kein Löschen oder
+  Überschreiben echter Tabellen, keine Änderung an Berechtigungen, kein Alarm an echte Empfänger,
+  ohne Zustimmung des Auftraggebers. Zuerst `dev`.
 * **Personenbezogene Daten** (`actor`, `initiator`): Zugriff beschränken; nichts davon in Logs,
   Tickets oder Screenshots außerhalb des Workspace.
-* **Ehrlich berichten:** Was du nicht testen konntest, meldest du als ungetestet, nicht als fertig.
+* **Ehrlich berichten:** Ungetestetes als ungetestet melden.
 
 ## 4. Was bereits geprüft ist (Ausgangslage)
 
 | Bestandteil | Status |
 |---|---|
-| SQL 01–10 (Modell, Views, Datasets, Alert) | lokal mit Apache Spark 4.0.1 geprüft, alle Abnahmewerte als Assertions in `tools/local_sql_check.py` |
-| `process_graph.vl.json` | rendert mit Vega-Lite 5.23 und 6.5 ohne Warnungen (`tools/check_vega_spec.mjs`) |
-| Python-Paket `python/` | 15 pytest-Tests grün, davon 5 gegen PostgreSQL 16 (append-only, Rollen, Rollback, Kopierlogik); Export der Status-Maschine identisch mit `config/workflow_definition.json` |
-| PostgreSQL-DDL `python/sql/postgres/001_process_event.sql` | gegen PostgreSQL 16 getestet |
-| CI-Check | 8 Befunde, 6 blockierend, Exit-Code 1 (Referenzlauf) |
-| `11_load_config_from_json.sql`, `12_federation_ingest.sql` | **ungetestet** (Databricks-spezifisch; die Kopierlogik von 12 ist in `test_postgres.py` nachgestellt) |
-| `process_mining.lvdash.json` | **ungetestet**, Format undokumentiert (Entwurf) |
-| Custom Viz im Workspace | **ungetestet** (Public Preview) |
-| Alles in einem echten Databricks-Workspace | **ungetestet**, das ist deine Hauptaufgabe |
+| Data-Manager-Paket `data_manager/python/` | 17 pytest-Tests grün, davon 6 gegen PostgreSQL 16 (append-only, Rollen, Rollback, Kopierlogik, Sync) |
+| PostgreSQL-DDL `001_process_event.sql`, `002_governance_model.sql` | gegen PostgreSQL 16 getestet |
+| CI-Check `dm-check-workflow` | 8 Befunde, 6 blockierend, Exit-Code 1 (Referenzlauf) |
+| dbt-Projekt `process_monitoring/dbt/` | `dbt build` mit Beispieldaten lokal (Spark 4.0.1 + Delta 4.0, dbt-spark Session): **50/50**, inklusive 5 Abnahmetests; zweiter Lauf über den inkrementellen MERGE ebenfalls 50/50 |
+| `process_graph.vl.json` | rendert mit den Daten aus `mart_process_graph` ohne Warnungen (Vega-Lite 5/6) |
+| Bundle-YAML (`databricks.yml`, `resources/`) | nur YAML-Syntax geprüft; **`databricks bundle validate` ungetestet** (CLI in der Testumgebung nicht verfügbar) |
+| `setup/01_unity_catalog_connection.sql`, Job, Dashboard-Import, Custom Viz, `dbt-databricks` | **ungetestet**, Databricks-spezifisch |
+| Vue-Bausteine `data_manager/frontend/` | **ungetestet** (kein Build) |
 
-Ausgangslage selbst prüfen: `bash tools/verify_all.sh`. Voraussetzungen: Python 3.10+, Java 17+
-mit `pip install pyspark==4.0.1 pytest`, Node 18+ mit `cd tools && npm install`.
+Ausgangslage selbst prüfen: `bash tools/verify_all.sh`, optional mit
+`DM_TEST_PG_DSN=postgresql://…/testdb` für die PostgreSQL-Tests.
+
+Voraussetzungen:
+- Python 3.10+ mit `pip install pytest "psycopg[binary]" "dbt-core>=1.10" "dbt-spark[session]>=1.9" pyspark==4.0.1`,
+- Java 17+,
+- Node 18+ mit `cd tools && npm install`.
 
 ## 5. Zuerst klären (blockierend)
 
-Frage den Auftraggeber, bevor du die Arbeitspakete 3 ff. beginnst. Details stehen in
-IMPLEMENTATION_SPEC.md, Abschnitt 3.
+Siehe IMPLEMENTATION_SPEC.md, Abschnitt 4. Stelle die Fragen gesammelt in einer Nachricht.
 
-1. Web-Framework und ORM des Data Managers (FastAPI, Django, Flask? SQLAlchemy?) und das
-   CI-System. Datenbank ist **PostgreSQL** (geklärt). Gibt es ein Read-Replica, und wie erreicht
-   Databricks die Datenbank (Private Link, VPC-Peering)?
-2. Echte Soll-Prozesse je Objekttyp: Status, erlaubte Übergänge, Endzustände, **Kontrollschritte**
-3. Governance-Regeln (Funktionstrennung, Fristen) inkl. Ausnahmen (technische Accounts, Notfälle)
-4. Regel für **laufende Vorgänge** (wann gilt ein Vorgang als abgeschlossen?)
-5. Process Owner, Alarm-Empfänger und Kanal (E-Mail, Teams/Slack, Ticket)
-6. Databricks: Workspace, Katalog und Schema (Dev/Prod), Recht für `CREATE CONNECTION` bzw.
-   Metastore-Admin, Secret-Scope, ob Custom Viz verfügbar ist, SQL Warehouse
-7. Ablage des Soll-Modells (eigenes Governance-Repository mit Freigaben?)
-8. Zielwerte (Konformitätsziel je Prozess) und Zeitfenster („aktuell“ 4 Wochen, „neu“ 8 Wochen)
+1. Data Manager: Web-Framework (FastAPI/Django/Flask?), ORM, CI-System, Read-Replica, Netzwerkweg
+   Databricks → PostgreSQL
+2. Echte Soll-Prozesse je Objekttyp inklusive **Kontrollschritte**
+3. Governance-Regeln (Funktionstrennung, Fristen) inklusive Ausnahmen
+4. Regel für laufende Vorgänge
+5. Process Owner, Alarm-Empfänger und Kanal
+6. Databricks: Workspaces dev/prod, Katalog/Schema, SQL Warehouse, `CREATE CONNECTION`-Recht,
+   Secret-Scope, Service Principal (prod), Custom Viz verfügbar?
+7. Ablage und Freigabe des Soll-Modells (CODEOWNERS in `data_manager/governance/` oder eigenes Repo)
+8. Zielwerte und Zeitfenster
 
 ## 6. Arbeitspakete
 
-Arbeite sie in dieser Reihenfolge ab. Jedes Paket ist erst fertig, wenn seine Prüfung bestanden ist.
+Arbeite sie in dieser Reihenfolge ab. Ein Paket ist erst fertig, wenn seine Prüfung bestanden ist.
+
+**Teil 1: Data Manager**
 
 | # | Arbeitspaket | Ergebnis | Prüfung |
 |---|---|---|---|
-| AP1 | **Ausgangslage verifizieren** | Referenzstand läuft lokal | `bash tools/verify_all.sh` → „ALLES BESTANDEN“ |
-| AP2 | **Dev-Schema in Databricks** mit Beispieldaten: `01`, `02`, `03` ausführen (Katalog/Schema anpassen) | Tabellen und Views im Dev-Schema | Abnahmewerte aus IMPLEMENTATION_SPEC.md Abschnitt 10 per SQL im Workspace reproduziert, gleiche Zahlen wie lokal |
-| AP3 | **Dashboard im Workspace** (3 Seiten) nach Abschnitt 8 bzw. `dashboard.html`. Datasets 04–07, 09, 10; Parameter `:process` und `:domain`. Custom Viz mit `process_graph.vl.json`; Felder ohne Aggregation: `row_type, id, src, tgt, cases, median_wait_h, x, y, w, h, seq, shape, node_kind, conformance, is_control, finding_type, system_status` | Dashboard, als `.lvdash.json` exportiert und versioniert | Zahlen stimmen mit dem Mockup überein; Graph für alle 3 Prozesse ohne Konsolenfehler; Tooltips; helles und dunkles Theme |
-| AP4 | **SQL Alert** aus `08_…` | Alert (Dev: Empfänger = Auftraggeber) | Alert löst mit Beispieldaten aus (5 Zeilen, 1 neu) |
-| AP5 | **Data Manager einbinden** (Python): Paket übernehmen, echte Status-Maschinen in `workflows.py`, alle Statuswechsel über `transition()`, Migration `001_process_event.sql`, EventStore passend zum ORM, `reject_sink` | Pull Request im Data-Manager-Repo | Tests grün inkl. `test_postgres.py` gegen eine Test-DB; neue Tests für den ORM-EventStore; kein Code setzt den Status an `transition()` vorbei (Suche oder Lint-Regel) |
-| AP6 | **Übernahme nach Databricks** per Lakehouse Federation (`12_federation_ingest.sql`): read-only DB-User (`dm_event_reader`, Read-Replica), Secrets, Connection, Foreign Catalog, Delta-Tabelle, `MERGE`-Job alle 5–15 Min.; `event_log` wird zur View | Footprints fließen vom Dev-Data-Manager nach Databricks | Testvorgang erscheint innerhalb des Job-Intervalls in `event_log`; abgewiesener Versuch erscheint als `rejected`; keine Duplikate nach mehrfachem Lauf; Vollständigkeitskontrolle = 0 |
-| AP7 | **CI-Check** in die Release-Pipeline (`pytest`, `dm-export-workflow`, `dm-check-workflow`); Prozess für genehmigte Ausnahmen mit der Governance | Pipeline-Schritt + `accepted_deviations.json` im Governance-Repo | Ein absichtlich eingebauter Übergang, der eine Kontrolle umgeht, lässt den Build scheitern |
-| AP8 | **Konfiguration aus JSON** (`11_…`) als Job nach Release bzw. Modellfreigabe; Historie der Status-Maschine | `system_allowed_transitions` mit `valid_from`/`valid_to` | Zwei Releases nacheinander laden: entfernter Übergang bekommt `valid_to`, neuer wird geöffnet |
-| AP9 | **Echte Soll-Prozesse und Regeln** in `governance_model.json` bzw. `02_…`, Layout in `process_graph_layout`; Regel für laufende Vorgänge | Konfiguration für Produktion | Befunde mit den Process Ownern durchgesprochen: echte Lücke oder fehlender Modelleintrag? |
-| AP10 | **Produktion** (nur nach Freigabe): Prod-Schema, Berechtigungen, Alert-Empfänger, Job-Zeitpläne; bei großem Volumen `v_transitions`/`v_findings` materialisieren | Produktivbetrieb | Abnahme durch den Auftraggeber |
+| AP1 | **Ausgangslage verifizieren** | Referenzstand läuft lokal | `bash tools/verify_all.sh` → „ALLES BESTANDEN“ (mit `DM_TEST_PG_DSN`) |
+| AP2 | **Footprints im Data Manager:** Paket übernehmen, Migrationen `001` + `002`, echte Status-Maschinen in `workflows.py` (inkl. `RELEASES`), alle Statuswechsel über `transition()`, EventStore passend zum ORM, `reject_sink`, Endpoints für `allowed_next`/`transition` | Pull Request im Data-Manager-Repo | Tests grün inkl. PostgreSQL; neue Tests für den ORM-EventStore; kein Code setzt den Status an `transition()` vorbei (Suche oder Lint-Regel) |
+| AP3 | **Vue-Frontend:** `useWorkflow`/`WorkflowActions` integrieren, 409-Behandlung, `traceparent` | Pull Request | Buttons zeigen nur erlaubte Aktionen; ein abgewiesener Versuch erscheint als `rejected` in `process_event` |
+| AP4 | **Stammdaten und CI:** `governance_model.json` mit den echten Soll-Prozessen (CODEOWNERS Governance), `dm-sync-governance` im Deploy, CI-Schritte `pytest` → `dm-export-workflow` → `dm-check-workflow`, Prozess für `accepted_deviations.json` | Pipeline + Deploy-Schritt | Ein absichtlich eingebauter Übergang, der eine Kontrolle umgeht, lässt den Build scheitern; nach Deploy stehen Release und Status-Maschine in `governance.*` |
+
+**Teil 2: Databricks (Bundle `process_monitoring`)**
+
+| # | Arbeitspaket | Ergebnis | Prüfung |
+|---|---|---|---|
+| AP5 | **Bundle in dev mit Beispieldaten:** Variablen setzen (Host, `warehouse_id`, Katalog/Schema; in dev ist `use_sample_data: true` voreingestellt), `databricks bundle validate/deploy -t dev`, `databricks bundle run -t dev process_monitoring_refresh` | Data Product mit Beispieldaten im Dev-Schema | `dbt build` im Workspace: alle Tests grün inkl. `acceptance_*`, gleiche Zahlen wie lokal |
+| AP6 | **Unity-Catalog-Einbindung:** read-only DB-User (Rolle `dm_event_reader`, Read-Replica), Secrets, `setup/01_unity_catalog_connection.sql` | Foreign Catalog `dm_pg` | `SELECT … FROM dm_pg.governance.process_event` und alle 7 Stammdaten-Tabellen lesbar; Grants für den Job-Principal |
+| AP7 | **Data Product auf echten Daten (dev):** in `databricks.yml` für dev `use_sample_data: false` setzen, neu deployen; Seeds `process_graph_layout` und `finding_severity` für die echten Prozesse anpassen | Marts aus echten Dev-Daten | Testvorgang im Dev-Data-Manager erscheint nach dem nächsten Joblauf in `mart_case_conformance`; mehrfacher Lauf ohne Duplikate; Vollständigkeitskontrolle = 0; dbt-Tests grün |
+| AP8 | **Dashboard:** Import über die Bundle-Ressource, Custom Viz mit `process_graph.vl.json` einrichten (Felder siehe Spec 6.4), danach `databricks bundle generate dashboard` und versionieren | 3-seitiges Dashboard, Export im Bundle | Aufbau und Verhalten wie im Mockup; Graph für alle Prozesse ohne Konsolenfehler; Filter Prozess/Domäne wirken; helles und dunkles Theme |
+| AP9 | **Alarm:** Alarm-Task mit Empfänger = Auftraggeber (dev) | Benachrichtigung | Mit Beispieldaten schlägt der Task fehl und meldet 5 Befunde (1 neu); ohne kritische Befunde ist er grün |
+| AP10 | **Produktion** (nur nach Freigabe): `-t prod`, Service Principal, Grants, echte Empfänger, Zeitplan | Produktivbetrieb | Abnahme durch den Auftraggeber |
 
 ## 7. Definition of Done
 
 - [ ] AP1–AP9 mit bestandener Prüfung; AP10 nach Freigabe
-- [ ] Dashboard-Export (`.lvdash.json`) aus dem Workspace versioniert und ersetzt den Entwurf
-- [ ] `bash tools/verify_all.sh` weiterhin grün; neue Logik mit Tests oder Assertions abgedeckt
-- [ ] Dokumente aktualisiert: geklärte Fragen eingetragen, Abweichungen vom Referenzstand begründet
+- [ ] Dashboard-Export aus dem Workspace im Bundle versioniert und ersetzt den Entwurf
+- [ ] `bash tools/verify_all.sh` weiterhin grün; neue Logik mit Tests abgedeckt (pytest bzw. dbt-Tests)
+- [ ] Dokumente aktualisiert: geklärte Fragen eingetragen, Abweichungen begründet
 - [ ] Übergabebericht an den Auftraggeber (siehe 8)
 
 ## 8. Berichtsformat
@@ -123,20 +129,19 @@ Arbeite sie in dieser Reihenfolge ab. Jedes Paket ist erst fertig, wenn seine Pr
 Am Ende jedes Arbeitspakets kurz berichten:
 - **Erledigt:** was, mit welchem Prüfergebnis (Zahlen bzw. Ausgabe)
 - **Ungetestet bzw. offen:** ehrlich benennen, mit Grund
-- **Entscheidungen:** was du festgelegt hast und warum (insbesondere Abweichungen von der
-  Spezifikation)
+- **Entscheidungen:** was du festgelegt hast und warum
 - **Nächster Schritt und Fragen an den Auftraggeber**
 
 ## 9. Dateien auf einen Blick
 
 | Bereich | Dateien |
 |---|---|
-| Konfiguration | `02_process_model.sql`, `config/governance_model.json`, `config/workflow_definition.json`, `ci/accepted_deviations.json` |
-| Logik | `03_views.sql` (7 Views), `python/src/datamanager_governance/conformance.py` |
-| Dashboard-Datasets | `04_…` bis `07_…`, `09_…`, `10_…`; Alert `08_…` |
-| Produktion | `11_load_config_from_json.sql`, `12_federation_ingest.sql`, `python/sql/postgres/001_process_event.sql` |
-| Data Manager | `python/` (Paket + Tests), `EVENT_STANDARD.md`, `examples/` |
-| CI | `ci/check_workflow_conformance.py`, `ci/github-actions-example.yml` |
-| Prüfung | `tools/verify_all.sh`, `tools/local_sql_check.py`, `tools/check_vega_spec.mjs` |
-| Zielbild | `dashboard.html`, `dashboard_*preview.png`, `process_graph_preview.png` |
-| Beispieldaten | `01_sample_event_log.sql` (nur Dev/Test; wird in AP6 durch echte Events ersetzt) |
+| Data Manager: Code | `data_manager/python/src/datamanager_governance/` (`state_machine.py`, `workflows.py`, `event_store.py`, `governance_sync.py`, `export.py`, `conformance.py`) |
+| Data Manager: Datenbank | `data_manager/python/sql/postgres/001_process_event.sql`, `002_governance_model.sql` |
+| Governance | `data_manager/governance/governance_model.json`, `accepted_deviations.json`, `workflow_definition.json` |
+| Frontend | `data_manager/frontend/` |
+| CI | `data_manager/ci/` |
+| Databricks-Bundle | `process_monitoring/databricks.yml`, `resources/`, `setup/`, `src/` |
+| Data Product (dbt) | `process_monitoring/dbt/` (`models/{sample,staging,intermediate,marts}`, `seeds/`, `tests/`, `macros/`) |
+| Zielbild | `mockup/` |
+| Prüfung | `tools/verify_all.sh`, `run_dbt_local.sh`, `export_graph_json.py`, `check_vega_spec.mjs` |

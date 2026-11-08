@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: mart_case_conformance
+    description: Ein Datensatz je Vorgang – Konformität, Flags je Befund-Art, Liste der Befunde.
+    columns:
+      - name: case_id
+        tests: [not_null]
+      - name: process
+        tests: [not_null]
+      - name: is_conformant
+        description: 1 = alle Übergänge laut Soll-Prozess erlaubt
+        tests: [{accepted_values: {arguments: {values: [0, 1]}}}]
+    tests:
+      - dbt_utils_free_unique_combination:
+          arguments: {columns: [process, case_id]}
+
+  - name: mart_findings
+    description: Jedes Befund-Vorkommen (Pfad-Abweichungen und Regelverstöße).
+    columns:
+      - name: severity
+        tests: [{accepted_values: {arguments: {values: [kritisch, hoch, mittel]}}}]
+      - name: finding_type
+        tests:
+          - relationships:
+              arguments: {to: ref('finding_severity'), field: finding_type}
+
+  - name: mart_findings_summary
+    description: Je Prozess, domain_scope und Befund – Status neu / tritt weiterhin auf / nicht mehr aufgetreten.
+    columns:
+      - name: status
+        tests: [{accepted_values: {arguments: {values: [neu, tritt weiterhin auf, nicht mehr aufgetreten]}}}]
+    tests:
+      - dbt_utils_free_unique_combination:
+          arguments: {columns: [process, domain_scope, finding_type, finding, severity]}
+
+  - name: mart_system_conformance
+    description: Soll vs. Status-Maschine vs. Ist je Übergang.
+    columns:
+      - name: system_category
+        tests:
+          - accepted_values:
+              arguments:
+                values: [Umgehung außerhalb des Workflows, Soll-Schritt nicht implementiert, System lässt mehr zu – genutzt,
+                         System lässt mehr zu – latent, Nicht mehr erlaubt, Vom System abgewiesen, Konform]
+    tests:
+      - dbt_utils_free_unique_combination:
+          arguments: {columns: [process, src, tgt]}
+
+  - name: mart_rejected_attempts
+    description: Vom Data Manager abgewiesene Statuswechsel.
+
+  - name: mart_process_graph
+    description: Geometrie des Soll-Ist-Prozessgraphen je process und domain_scope (Custom Viz).
+    columns:
+      - name: row_type
+        tests: [{accepted_values: {arguments: {values: [node, edge, arrow, label, frame]}}}]
+      - name: conformance
+        tests: [{accepted_values: {arguments: {values: [soll, abweichung, kontrolle_umgangen, latent]}}}]
+
+  - name: mart_alert_critical_findings
+    description: Neue bzw. aktuelle kritische Befunde – Grundlage des Alarm-Tasks.

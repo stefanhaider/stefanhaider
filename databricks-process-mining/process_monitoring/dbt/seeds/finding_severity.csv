@@ -1,0 +1,10 @@
+finding_type,severity,severity_rank,recommended_action
+Kontrolle umgangen,kritisch,1,Kontrollschritt in der Applikation erzwingen
+Funktionstrennung verletzt,kritisch,1,Vier-Augen-Prinzip in der Applikation erzwingen
+Abbruch an unzulässiger Stelle,hoch,2,Statusübergang in der Applikation sperren
+Schritt übersprungen,hoch,2,"Prüfen, ob der Schritt optional ist; sonst erzwingen"
+Unzulässiger Übergang,hoch,2,Statusübergang prüfen und ggf. sperren
+Kein gültiger Abschluss,hoch,2,Abgebrochene oder hängende Vorgänge klären
+Rücksprung / Wiederholung,mittel,3,Soll-Prozess ergänzen oder Ursache beheben
+Zusätzliche Aktivität,mittel,3,Soll-Prozess ergänzen oder Aktivität unterbinden
+Frist überschritten,mittel,3,Erinnerung und Eskalation einrichten

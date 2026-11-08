@@ -1,0 +1,29 @@
+process,activity,x,y
+Access Request,▶ Start,400,24
+Access Request,Beantragt,400,100
+Access Request,Prüfung Data Owner,400,180
+Access Request,Prüfung Security,400,260
+Access Request,Berechtigung erteilt,400,340
+Access Request,Abgelehnt,660,340
+Access Request,■ Ende,400,420
+Data Contract,▶ Start,400,24
+Data Contract,Entwurf erstellt,400,100
+Data Contract,Schema validiert,400,180
+Data Contract,Review Data Owner,400,260
+Data Contract,Verworfen,150,340
+Data Contract,Freigegeben,400,340
+Data Contract,Aktiv,400,420
+Data Contract,Änderung beantragt,660,420
+Data Contract,Schema erneut validiert,660,500
+Data Contract,Review Änderung,660,580
+Data Contract,Neue Version aktiv,660,660
+Data Contract,■ Ende,400,740
+Data Product,▶ Start,400,24
+Data Product,Angelegt,400,100
+Data Product,Metadaten erfasst,400,180
+Data Product,Data Contract verknüpft,400,260
+Data Product,Qualitätsprüfung,400,340
+Data Product,Freigabe Data Owner,400,420
+Data Product,Veröffentlicht,400,500
+Data Product,Abgelehnt,660,500
+Data Product,■ Ende,400,580

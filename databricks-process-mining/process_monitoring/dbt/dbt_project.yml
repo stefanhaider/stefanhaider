@@ -1,0 +1,38 @@
+# Data Product "process_monitoring" – Prozess- und Governance-Monitoring des Data Managers.
+# Quelle: PostgreSQL des Data Managers, eingebunden per Unity Catalog (Foreign Catalog, var dm_catalog).
+# Ergebnis: marts.* für die AI/BI-Dashboards und den Alarm (siehe ../resources/).
+name: process_monitoring
+version: "1.0.0"
+config-version: 2
+profile: process_monitoring
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+vars:
+  dm_catalog: dm_pg              # Foreign Catalog auf die Data-Manager-Datenbank
+  dm_schema: governance
+  use_sample_data: false         # true = Beispieldaten statt Data Manager (Dev, Abnahmetests)
+  overlap_minutes: 15            # Überlappungsfenster der inkrementellen Übernahme
+  recent_days: 28                # "tritt weiterhin auf"
+  new_days: 56                   # "neu"
+
+models:
+  process_monitoring:
+    +file_format: delta
+    sample:
+      +materialized: table
+      +enabled: "{{ var('use_sample_data') | as_bool }}"
+      +tags: ["sample"]
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: table
+    marts:
+      +materialized: table
+
+seeds:
+  process_monitoring:
+    +file_format: delta

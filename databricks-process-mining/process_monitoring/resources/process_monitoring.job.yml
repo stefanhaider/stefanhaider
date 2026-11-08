@@ -1,0 +1,44 @@
+resources:
+  jobs:
+    process_monitoring_refresh:
+      name: process_monitoring_refresh
+      description: >
+        Baut das Data Product process_monitoring (dbt) aus den Daten des Data Managers
+        (Foreign Catalog ${var.dm_catalog}) und prüft danach auf neue/aktuelle kritische Befunde.
+      schedule:
+        quartz_cron_expression: "0 0/15 * * * ?"     # alle 15 Minuten
+        timezone_id: Europe/Vienna
+        pause_status: UNPAUSED                       # in dev durch mode: development pausiert
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure: ${var.alert_emails}
+      tasks:
+        - task_key: dbt_build
+          description: dbt deps + build (Seeds, Modelle, Tests) – inkrementelle Übernahme der Footprints
+          environment_key: dbt
+          dbt_task:
+            project_directory: ../dbt
+            profiles_directory: profiles
+            warehouse_id: ${var.warehouse_id}
+            catalog: ${var.catalog}
+            schema: ${var.schema}
+            commands:
+              - "dbt deps"
+              - "dbt build --target databricks --vars '{dm_catalog: ${var.dm_catalog}, use_sample_data: ${var.use_sample_data}}'"
+        - task_key: alert_critical_findings
+          description: Schlägt fehl (=> E-Mail), wenn neue oder aktuelle kritische Befunde vorliegen
+          depends_on:
+            - task_key: dbt_build
+          sql_task:
+            warehouse_id: ${var.warehouse_id}
+            file:
+              path: ../src/sql/alert_critical_findings.sql
+            parameters:
+              catalog: ${var.catalog}
+              schema: ${var.schema}
+      environments:
+        - environment_key: dbt
+          spec:
+            client: "2"
+            dependencies:
+              - dbt-databricks>=1.9,<2.0
