@@ -60,7 +60,9 @@ niemand nutzt. ◆ markiert Kontrollschritte.
 | `EVENT_STANDARD.md` | Event-Format, Export der Status-Maschine, Datenfluss, Entwickler-Checkliste |
 | `config/` | Soll-Prozess (`governance_model.json`) und Status-Maschine (`workflow_definition.json`) als JSON |
 | `ci/` | CI-Check (`check_workflow_conformance.py`), genehmigte Ausnahmen, Pipeline-Beispiel |
-| `examples/` | Referenz-Event-Writer (Status-Maschine + Outbox) und Beispiel-Events |
+| `python/` | **Python-Paket `datamanager_governance`** für den Data Manager: Status-Maschine, Events, Outbox, Export, CI-Check, Publisher (+ Tests) |
+| `12_ingest_events.sql` | Produktion: Events aus dem Volume nach `event_log` laden (Databricks-spezifisch) |
+| `examples/` | Demo des Pakets und Beispiel-Events |
 | `process_graph.vl.json` | Vega-Lite-Spezifikation für Custom Viz |
 | `process_mining.lvdash.json` | Dashboard-Entwurf zum Import (ungetestet; ohne Prozessgraph, dafür ein Platzhalter) |
 | `dashboard.html` | Interaktives Mockup, im Browser öffnen, funktioniert offline |
@@ -73,14 +75,19 @@ niemand nutzt. ◆ markiert Kontrollschritte.
 2. Dashboard: `process_mining.lvdash.json` importieren oder manuell nach der Spezifikation
    aufbauen. Den Prozessgraphen als Custom Viz mit `04_…` und `process_graph.vl.json` anlegen.
 3. SQL Alert mit `08_…` einrichten.
-4. Im Data Manager den Event-Standard umsetzen und den CI-Check in die Release-Pipeline aufnehmen:
-   `python ci/check_workflow_conformance.py --model config/governance_model.json --workflow config/workflow_definition.json`
+4. Im Data Manager (Python) das Paket einbinden und den CI-Check in die Release-Pipeline aufnehmen:
+   ```bash
+   pip install ./python[test]
+   pytest python/tests
+   dm-export-workflow --out build/workflow_definition.json
+   dm-check-workflow --model config/governance_model.json --workflow build/workflow_definition.json --accepted ci/accepted_deviations.json
+   ```
 
 Neue Prozesse oder Prozessänderungen pflegst du **nur in `02_process_model.sql`**.
 
 ## Status
 
-Alle SQL-Dateien außer `11_…` sind lokal mit Apache Spark 4.0.1 getestet. CI-Check und
-Beispiel-Event-Writer laufen mit Python 3 (nur Standardbibliothek). Die Vega-Lite-Spezifikation
+Alle SQL-Dateien außer `11_…` und `12_…` sind lokal mit Apache Spark 4.0.1 getestet. Das
+Python-Paket hat 10 grüne Tests, der Kern braucht nur die Standardbibliothek. Die Vega-Lite-Spezifikation
 rendert in Vega-Lite 5 und 6 ohne Warnungen. In einem echten Databricks-Workspace ist **noch
 nichts** getestet, das ist Teil des Implementierungsauftrags.

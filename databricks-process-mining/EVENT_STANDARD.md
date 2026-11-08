@@ -87,7 +87,10 @@ Beispiele: [`examples/events_example.jsonl`](examples/events_example.jsonl).
 ```
 Data Manager  ── transition() ──►  DB (Status + Outbox, 1 Transaktion)
                                         │
-                                        ▼  Outbox-Publisher (Job/CDC)
+                                        ▼  dm-publish-events (Job, z. B. jede Minute)
+                     /Volumes/main/data_manager_pm/events/*.jsonl
+                                        │  12_ingest_events.sql (Auto Loader)
+                                        ▼
                                 Databricks Bronze (Events roh, JSON)
                                         │  Dedupe nach event_id, Typen
                                         ▼
@@ -95,18 +98,52 @@ Data Manager  ── transition() ──►  DB (Status + Outbox, 1 Transaktion)
                                         │
                      Views 03_views.sql ─► Dashboard, SQL Alerts
 
-Build/Release ── export ──► workflow_definition.json ──► CI-Check gegen governance_model.json
+Build/Release ── dm-export-workflow ──► workflow_definition.json ──► dm-check-workflow gegen governance_model.json
                                                     └──► 11_load_config_from_json.sql (Historie)
 ```
 
-## 7. Referenz-Implementierung
+## 7. Umsetzung in Python: Paket `datamanager_governance`
 
-[`examples/event_writer_example.py`](examples/event_writer_example.py) zeigt:
-- die zentrale Status-Maschine,
-- `transition()` mit Outbox und Protokollierung abgewiesener Versuche,
-- den Export der Workflow-Definition.
+Der Data Manager ist in Python geschrieben. Deshalb liegt die Umsetzung als installierbares Paket
+in [`python/`](python) vor (`pip install ./python`). Der Kern braucht nur die Standardbibliothek,
+für den Publisher in ein Unity-Catalog-Volume ist `databricks-sdk` optional. Es gibt 10 Tests.
 
-Das Beispiel ist in Python geschrieben und lässt sich 1:1 auf andere Sprachen übertragen.
+| Modul | Inhalt |
+|---|---|
+| `events.py` | `ProcessEvent` (Dataclass) mit Validierung der Pflichtfelder, Kanäle und Event-Typen; `to_json()` |
+| `state_machine.py` | `Workflow` (erlaubte Übergänge inkl. Kanal-Einschränkung, Endzustände), `StateMachine.transition()`: einziger Weg für Statuswechsel, schreibt Event in die Outbox, wirft `TransitionRejected` |
+| `outbox.py` | `DbApiOutbox` (sqlite3, psycopg, …), `autonomous_sink()` für abgewiesene Versuche in eigener Transaktion, Beispiele für SQLAlchemy und Django |
+| `workflows.py` | **die Status-Maschinen des Data Managers** (Access Request, Data Contract, Data Product): Single Source of Truth der System-Ebene |
+| `export.py` | `dm-export-workflow`: erzeugt `workflow_definition.json` |
+| `conformance.py` | `dm-check-workflow`: CI-Check gegen den Soll-Prozess |
+| `publisher.py` | `dm-publish-events`: Outbox → JSONL-Dateien (atomar) lokal oder in `/Volumes/...` |
+
+**Einbindung:**
+
+```python
+from datamanager_governance.state_machine import StateMachine, TransitionRejected
+from datamanager_governance.workflows import WORKFLOWS, APP_VERSION
+
+sm = StateMachine(WORKFLOWS, store=ObjectRepository(), outbox=SqlAlchemyOutbox(),
+                  app_version=APP_VERSION, reject_sink=reject_in_own_transaction)
+
+# Service-Schicht, z. B. FastAPI-Endpoint oder Django-View – NIE den Status direkt setzen:
+with session.begin():                                    # Django: with transaction.atomic():
+    sm.transition("Access Request", req_id, "Prüfung Data Owner",
+                  actor=current_user.id, channel="ui", conn=session, domain=req.domain,
+                  trace_id=current_trace_id(), reason=comment)
+```
+
+* **Abgewiesene Versuche** gehen über `reject_sink` in einer **eigenen** Transaktion. Sonst
+  verschwinden sie mit dem Rollback, den `TransitionRejected` in der Anwendung auslöst.
+* **Keine Statusänderung außerhalb von `transition()`.** Kein direktes `obj.status = ...` und
+  keine Massen-Updates per SQL. Am besten das Statusfeld im ORM schreibgeschützt machen und
+  per Code-Review bzw. Lint-Regel absichern.
+* Batch- und Migrationsjobs rufen ebenfalls `transition()` auf, mit `channel="batch"` bzw.
+  `"migration"` und einem Service-Account als `actor`.
+* `trace_id` aus OpenTelemetry übernehmen. Dann lässt sich jedes Event mit dem Application
+  Monitoring verknüpfen.
+* Lauffähige Demo: [`examples/event_writer_example.py`](examples/event_writer_example.py).
 
 ## 8. Checkliste für Entwickler
 
@@ -114,6 +151,8 @@ Das Beispiel ist in Python geschrieben und lässt sich 1:1 auf andere Sprachen �
 - [ ] Event und Statusänderung stehen in derselben Transaktion (Outbox).
 - [ ] Abgewiesene Übergänge erzeugen ein `rejected`-Event.
 - [ ] `channel`, `app_version` und `actor` sind immer gefüllt; Service-Accounts sind erkennbar.
-- [ ] `workflow_definition.json` wird im Build erzeugt, und der CI-Check läuft vor jedem Release.
+- [ ] `workflow_definition.json` wird im Build erzeugt (`dm-export-workflow`), und der CI-Check
+      (`dm-check-workflow`) läuft vor jedem Release.
+- [ ] Abgewiesene Versuche gehen über `reject_sink` in eine eigene Transaktion.
 - [ ] Neue Übergänge, die eine Kontrolle umgehen, brauchen eine genehmigte Ausnahme
       (`accepted_deviations.json`) oder eine Anpassung des Soll-Prozesses durch die Governance.

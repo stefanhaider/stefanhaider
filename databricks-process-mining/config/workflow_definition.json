@@ -43,18 +43,6 @@
           "note": "Standard-Workflow"
         },
         {
-          "from": "Berechtigung erteilt",
-          "to": "■ Ende",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
-          "from": "Abgelehnt",
-          "to": "■ Ende",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
           "from": "Prüfung Data Owner",
           "to": "Beantragt",
           "since_release": "2.2",
@@ -71,48 +59,24 @@
           "to": "Berechtigung erteilt",
           "since_release": "2.2",
           "note": "Express-Vergabe (Feature-Flag, ungenutzt)"
+        },
+        {
+          "from": "Berechtigung erteilt",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Abgelehnt",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
         }
       ]
     },
     {
       "process": "Data Contract",
       "transitions": [
-        {
-          "from": "Änderung beantragt",
-          "to": "Schema erneut validiert",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
-          "from": "Schema erneut validiert",
-          "to": "Review Änderung",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
-          "from": "Review Änderung",
-          "to": "Neue Version aktiv",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
-          "from": "Neue Version aktiv",
-          "to": "■ Ende",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
-          "from": "Verworfen",
-          "to": "■ Ende",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
-          "from": "Änderung beantragt",
-          "to": "Neue Version aktiv",
-          "since_release": "2.2",
-          "note": "REST-API: PATCH aktiviert neue Version direkt"
-        },
         {
           "from": "▶ Start",
           "to": "Entwurf erstellt",
@@ -151,13 +115,49 @@
         },
         {
           "from": "Aktiv",
+          "to": "Änderung beantragt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Änderung beantragt",
+          "to": "Schema erneut validiert",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Schema erneut validiert",
+          "to": "Review Änderung",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Review Änderung",
+          "to": "Neue Version aktiv",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Änderung beantragt",
+          "to": "Neue Version aktiv",
+          "since_release": "2.2",
+          "note": "REST-API: PATCH aktiviert neue Version direkt"
+        },
+        {
+          "from": "Aktiv",
           "to": "■ Ende",
           "since_release": "2.2",
           "note": "Standard-Workflow"
         },
         {
-          "from": "Aktiv",
-          "to": "Änderung beantragt",
+          "from": "Neue Version aktiv",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Verworfen",
+          "to": "■ Ende",
           "since_release": "2.2",
           "note": "Standard-Workflow"
         }
@@ -215,18 +215,6 @@
           "note": "Standard-Workflow"
         },
         {
-          "from": "Veröffentlicht",
-          "to": "■ Ende",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
-          "from": "Abgelehnt",
-          "to": "■ Ende",
-          "since_release": "2.2",
-          "note": "Standard-Workflow"
-        },
-        {
           "from": "Data Contract verknüpft",
           "to": "Freigabe Data Owner",
           "since_release": "2.2",
@@ -243,6 +231,18 @@
           "to": "Freigabe Data Owner",
           "since_release": "2.2",
           "note": "Contract und Qualität überspringbar (ungenutzt)"
+        },
+        {
+          "from": "Veröffentlicht",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Abgelehnt",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
         }
       ]
     }

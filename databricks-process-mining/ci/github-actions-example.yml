@@ -1,6 +1,6 @@
 # Beispiel: Workflow-Konformität bei jedem Pull Request / Release des Data Managers prüfen.
-# Passe Pfade an dein Repository an. Der Export der Status-Maschine (workflow_definition.json)
-# wird im Build aus dem Code erzeugt; das Soll-Modell kommt aus dem Governance-Repository.
+# Voraussetzung: das Paket datamanager_governance (Ordner python/) ist Teil des Data-Manager-Repos
+# bzw. als Abhängigkeit installiert; das Soll-Modell kommt aus dem Governance-Repository.
 name: workflow-conformance
 on:
   pull_request:
@@ -18,11 +18,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: pip install ./python[test]
+      - name: Tests (Status-Maschine, Export, Check)
+        run: pytest python/tests -q
       - name: Status-Maschine exportieren
-        run: python -m datamanager.export_workflow_definition > build/workflow_definition.json   # dein Export
+        run: mkdir -p build && dm-export-workflow --out build/workflow_definition.json
       - name: Gegen Soll-Prozess prüfen
         run: |
-          python ci/check_workflow_conformance.py \
+          dm-check-workflow \
             --model governance/governance_model.json \
             --workflow build/workflow_definition.json \
             --accepted governance/accepted_deviations.json \
@@ -30,5 +33,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: workflow-conformance-report
-          path: build/workflow_conformance.json
+          name: workflow-conformance
+          path: build/

@@ -80,20 +80,23 @@ Repository `stefanhaider/stefanhaider`, Branch `ccr-f1f6041b-rq5je9`, Ordner
 | `11_load_config_from_json.sql` | Produktion: Soll-Modell und Status-Maschine aus JSON laden (Status-Maschine mit Historie). Databricks-spezifisch, **lokal nicht getestet** |
 | `EVENT_STANDARD.md` | **Verbindliches Event-Format** für den Data Manager, Export der Status-Maschine, Datenfluss, Entwickler-Checkliste |
 | `config/governance_model.json` | Soll-Prozess als JSON (gehört der Governance) |
-| `config/workflow_definition.json` | Export der Status-Maschine, Release 2.5 (gehört dem Data Manager) |
-| `ci/check_workflow_conformance.py` | **CI-Check** Status-Maschine gegen Soll-Prozess, nur Standardbibliothek; Exit-Code 1 bei offenen kritischen Befunden |
+| `config/workflow_definition.json` | Export der Status-Maschine, Release 2.5, **erzeugt aus `python/…/workflows.py`** (gehört dem Data Manager) |
+| `python/` | **Python-Paket `datamanager_governance`** für den Data Manager: Event-Modell, Status-Maschine (`workflows.py` = System-Ebene), Outbox, `dm-export-workflow`, `dm-check-workflow`, `dm-publish-events`; 10 pytest-Tests |
+| `12_ingest_events.sql` | Produktion: JSONL-Events aus dem Volume per Auto Loader → `event_log_bronze` → View `event_log`. Databricks-spezifisch, **lokal nicht getestet** |
+| `ci/check_workflow_conformance.py` | Wrapper für den CI-Check ohne installiertes Paket; Exit-Code 1 bei offenen kritischen Befunden |
 | `ci/accepted_deviations.json` | Genehmigte Ausnahmen (Begründung, Genehmiger, Ablaufdatum) |
 | `ci/github-actions-example.yml` | Beispiel-Pipeline |
-| `examples/event_writer_example.py` | Referenz: zentrale Status-Maschine, `transition()` mit Outbox, Protokollierung abgewiesener Versuche, Export der Workflow-Definition |
+| `examples/event_writer_example.py` | Lauffähige Demo des Pakets: Statuswechsel, abgewiesener Versuch, Publisher, Export |
 | `examples/events_example.jsonl` | Beispiel-Events nach Standard |
 | `process_graph.vl.json` | Vega-Lite-Spezifikation des Prozessgraphen (Custom Viz) |
 | `process_mining.lvdash.json` | Entwurf der Dashboard-Exportdatei (3 Seiten). **Ungetestet**, Format undokumentiert |
 | `dashboard.html` | Interaktives Mockup = **Soll-Zustand der Oberfläche** (Seiten „Übersicht“, „Prozessdetail“, „System-Konformität“) |
 | `dashboard_preview.png`, `dashboard_detail_preview.png`, `dashboard_system_preview.png`, `process_graph_preview.png` | Screenshots des Soll-Zustands |
 
-Alle SQL-Dateien außer `11_…` wurden mit Apache Spark 4.0.1 lokal ausgeführt, die
-parametrisierten mit mehreren Werten. Der CI-Check und der Beispiel-Event-Writer laufen mit
-Python 3. Die Spezifikation rendert in Vega-Lite 5.23 und 6.5 ohne Warnungen.
+Alle SQL-Dateien außer `11_…` und `12_…` wurden mit Apache Spark 4.0.1 lokal ausgeführt, die
+parametrisierten mit mehreren Werten. Das Python-Paket hat 10 grüne pytest-Tests. Der Export
+aus `workflows.py` ist identisch mit der in Spark getesteten System-Konfiguration (38 Übergänge).
+Der CI-Check und die Demo laufen. Die Spezifikation rendert in Vega-Lite 5.23 und 6.5 ohne Warnungen.
 **Nichts davon wurde in einem echten Databricks-Workspace getestet.** Das ist die Hauptaufgabe.
 
 ---
@@ -122,9 +125,9 @@ Python 3. Die Spezifikation rendert in Vega-Lite 5.23 und 6.5 ohne Warnungen.
    Personenkennungen, daher Datenschutz und Zugriff auf das Dashboard klären.
 9. Ist **Custom Viz (Public Preview)** im Workspace verfügbar, und welche Vega-Lite-Version
    läuft dort?
-10. **Technologie des Data Managers** (Sprache, Datenbank, CI-System). Davon hängt ab, wie
-    Event-Writer, Outbox und Export der Status-Maschine konkret umgesetzt werden. Die Referenz
-    ist in Python.
+10. **Technologie des Data Managers:** Sprache ist **Python** (geklärt). Offen sind Web-Framework
+    (FastAPI, Django, Flask?), ORM bzw. Datenbank (SQLAlchemy/Postgres?) und CI-System. Davon hängt
+    die konkrete Outbox-Implementierung ab (SQLAlchemy- bzw. Django-Variante, siehe `outbox.py`).
 11. **Wo liegt das Soll-Modell?** Empfehlung: `governance_model.json` in einem Governance-Repository
     mit eigenen Freigaben (Process Owner). Der Data Manager liest es nur.
 
@@ -495,16 +498,17 @@ orange, grün) nur dafür verwenden.
    Aggregation**: `row_type, id, src, tgt, cases, median_wait_h, x, y, w, h, seq, shape, node_kind,
    conformance, is_control, finding_type`.
 8. SQL Alert aus `08_…` einrichten, täglich, Empfänger je Process Owner.
-8a. **Im Data Manager** den Event-Standard umsetzen ([`EVENT_STANDARD.md`](EVENT_STANDARD.md)):
-    - zentrale Status-Maschine,
-    - `transition()` mit Outbox,
-    - `rejected`-Events,
-    - Pflichtfelder `channel` und `app_version`,
-    - Export `workflow_definition.json` im Build.
-
-    Danach die Event-View auf die neuen Events umstellen.
-8b. **CI-Check** in die Release-Pipeline des Data Managers aufnehmen (`ci/…`; Beispiel
-    `github-actions-example.yml`). Prozess für genehmigte Ausnahmen mit der Governance
+8a. **Im Data Manager (Python)** das Paket `datamanager_governance` einbinden
+    ([`EVENT_STANDARD.md`](EVENT_STANDARD.md), Abschnitt 7):
+    - die echten Status-Maschinen in `workflows.py` pflegen,
+    - alle Statuswechsel über `StateMachine.transition()` führen (UI, API, Admin, Batch),
+    - die Outbox-Implementierung passend zum ORM ergänzen, `reject_sink` mit eigener
+      Transaktion einrichten,
+    - `dm-publish-events` als Job einrichten,
+    - `12_ingest_events.sql` als Pipeline anlegen. Damit ersetzt die View `event_log` die
+      Beispieltabelle.
+8b. **CI-Check** in die Release-Pipeline des Data Managers aufnehmen: `pytest`,
+    `dm-export-workflow`, `dm-check-workflow` (Beispiel `ci/github-actions-example.yml`). Prozess für genehmigte Ausnahmen mit der Governance
     vereinbaren (`accepted_deviations.json`: Begründung, Genehmiger, Ablaufdatum).
 8c. Job einrichten, der nach jedem Release bzw. jeder Freigabe des Soll-Modells
     `11_load_config_from_json.sql` ausführt. Dabei die Historie der Status-Maschine behalten.
@@ -551,6 +555,9 @@ Diese Werte müssen exakt herauskommen:
   dunkles Theme sind lesbar.
 * Der CI-Check bricht ein Release ab, wenn die Status-Maschine eine Kontrolle umgehen lässt und
   keine gültige Ausnahme existiert.
+* `pytest python/tests` ist grün (10 Tests). `dm-export-workflow` liefert dieselben 38 Übergänge wie
+  `config/workflow_definition.json`. Ein abgewiesener Versuch bleibt nach einem Rollback in der
+  Outbox erhalten.
 * **Ein neuer Prozess oder eine Prozessänderung erfordert nur Einträge in `02_process_model.sql`**
   (und ggf. im Status-Mapping der Event-View), keine Änderung an Views, Datasets oder Dashboard.
 * Der Alarm erreicht den Process Owner bei einem neuen kritischen Befund.
@@ -595,6 +602,7 @@ Diese Werte müssen exakt herauskommen:
 
 ## 13. Lokal testen ohne Workspace (optional)
 
+* **Python-Paket:** `pip install -e ./python[test] && pytest python/tests`.
 * **SQL:** PySpark 4.x; `main.data_manager_pm.` durch ein lokales Schema ersetzen, `CREATE OR
   REPLACE TABLE` durch `CREATE TABLE`; Parameter über
   `spark.sql(q, args={"process": "Access Request", "domain": "Alle"})`.
