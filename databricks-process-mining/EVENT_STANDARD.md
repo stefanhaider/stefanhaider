@@ -11,8 +11,11 @@
    Stelle im Code definiert. Keine Statusänderung „nebenbei“ in Services, Jobs oder Skripten.
 2. **Jeder Statuswechsel läuft durch denselben Code-Pfad** (`transition()`), unabhängig vom
    Kanal: UI, REST-API, Admin-API, Batch, Migration oder System-Automatik.
-3. **Genau ein Event je Statuswechsel**, in **derselben Transaktion** wie die Statusänderung
-   (Outbox-Pattern). Kein Event ohne Statuswechsel, kein Statuswechsel ohne Event.
+3. **Genau ein Event je Statuswechsel**, in **derselben Transaktion** wie die Statusänderung, in
+   die append-only Tabelle `governance.process_event` der PostgreSQL-Datenbank des Data Managers.
+   Kein Event ohne Statuswechsel, kein Statuswechsel ohne Event. Die Tabelle ist der dauerhafte
+   Audit-Trail. Databricks liest sie über Unity Catalog (Lakehouse Federation); ein eigener
+   Versand-Job entfällt.
 4. **Abgewiesene Versuche werden ebenfalls protokolliert** (`event_type = 'rejected'`). Sie
    belegen, dass Kontrollen greifen, und zeigen, wo Anwender Umgehungen versuchen.
 5. **Die Status-Maschine ist exportierbar** (`workflow_definition.json`), damit sie vor jedem
@@ -58,7 +61,7 @@ Beispiele: [`examples/events_example.jsonl`](examples/events_example.jsonl).
 | Batch und Migration | gleicher Code-Pfad, `channel = batch/migration`, `actor` = Service-Account. Darf die Status-Maschine nicht umgehen. Falls doch nötig: eigener, erlaubter Übergang mit Kanal-Einschränkung |
 | Admin-Korrekturen | `channel = admin_api`, Pflichtfeld `reason`. Erlaubte Admin-Übergänge explizit in der Status-Maschine |
 | Wiederholte Events | gleiche `event_id` wird beim Laden dedupliziert |
-| Uhrzeit | UTC, Millisekunden; bei gleichem Zeitstempel entscheidet die Reihenfolge der Outbox |
+| Uhrzeit | UTC, Millisekunden; bei gleichem Zeitstempel entscheidet `seq` aus `process_event` |
 
 ## 5. Status-Maschine exportieren: `workflow_definition.json`
 
@@ -85,16 +88,13 @@ Beispiele: [`examples/events_example.jsonl`](examples/events_example.jsonl).
 ## 6. Datenfluss
 
 ```
-Data Manager  ── transition() ──►  DB (Status + Outbox, 1 Transaktion)
-                                        │
-                                        ▼  dm-publish-events (Job, z. B. jede Minute)
-                     /Volumes/main/data_manager_pm/events/*.jsonl
-                                        │  12_ingest_events.sql (Auto Loader)
+Data Manager ── transition() ──► PostgreSQL: Status + governance.process_event (1 Transaktion, append-only)
+                                        │  Unity Catalog: Connection + Foreign Catalog dm_pg
+                                        │  (read-only User, möglichst Read-Replica)
+                                        ▼  12_federation_ingest.sql: MERGE alle 5–15 Min.
+                     main.data_manager_pm.process_event_bronze  (Delta, Historie)
                                         ▼
-                                Databricks Bronze (Events roh, JSON)
-                                        │  Dedupe nach event_id, Typen
-                                        ▼
-                     main.data_manager_pm.event_log  (Silver, Spalten wie oben)
+                     main.data_manager_pm.event_log  (View, Spalten wie oben)
                                         │
                      Views 03_views.sql ─► Dashboard, SQL Alerts
 
@@ -106,17 +106,18 @@ Build/Release ── dm-export-workflow ──► workflow_definition.json ─�
 
 Der Data Manager ist in Python geschrieben. Deshalb liegt die Umsetzung als installierbares Paket
 in [`python/`](python) vor (`pip install ./python`). Der Kern braucht nur die Standardbibliothek,
-für den Publisher in ein Unity-Catalog-Volume ist `databricks-sdk` optional. Es gibt 10 Tests.
+für PostgreSQL wird `psycopg` 3 verwendet. Es gibt 15 Tests, davon 5 gegen echtes PostgreSQL 16
+(laufen mit `DM_TEST_PG_DSN`).
 
 | Modul | Inhalt |
 |---|---|
 | `events.py` | `ProcessEvent` (Dataclass) mit Validierung der Pflichtfelder, Kanäle und Event-Typen; `to_json()` |
-| `state_machine.py` | `Workflow` (erlaubte Übergänge inkl. Kanal-Einschränkung, Endzustände), `StateMachine.transition()`: einziger Weg für Statuswechsel, schreibt Event in die Outbox, wirft `TransitionRejected` |
-| `outbox.py` | `DbApiOutbox` (sqlite3, psycopg, …), `autonomous_sink()` für abgewiesene Versuche in eigener Transaktion, Beispiele für SQLAlchemy und Django |
+| `state_machine.py` | `Workflow` (erlaubte Übergänge inkl. Kanal-Einschränkung, Endzustände), `StateMachine.transition()`: einziger Weg für Statuswechsel, schreibt das Event in `process_event` (gleiche Transaktion), wirft `TransitionRejected` |
+| `event_store.py` | `PostgresEventStore` (psycopg) bzw. `SqliteEventStore` (Tests) für `process_event`, `autonomous_sink()` für abgewiesene Versuche in eigener Transaktion, Beispiele für SQLAlchemy und Django |
+| `python/sql/postgres/001_process_event.sql` | PostgreSQL-DDL: Tabelle mit Spalten nach Standard, Prüfung auf UTF-8, **Append-only-Trigger** (UPDATE/DELETE/TRUNCATE verboten), Rollen `dm_event_writer` (nur INSERT) und `dm_event_reader` (nur SELECT, für Databricks) |
 | `workflows.py` | **die Status-Maschinen des Data Managers** (Access Request, Data Contract, Data Product): Single Source of Truth der System-Ebene |
 | `export.py` | `dm-export-workflow`: erzeugt `workflow_definition.json` |
 | `conformance.py` | `dm-check-workflow`: CI-Check gegen den Soll-Prozess |
-| `publisher.py` | `dm-publish-events`: Outbox → JSONL-Dateien (atomar) lokal oder in `/Volumes/...` |
 
 **Einbindung:**
 
@@ -124,7 +125,7 @@ für den Publisher in ein Unity-Catalog-Volume ist `databricks-sdk` optional. Es
 from datamanager_governance.state_machine import StateMachine, TransitionRejected
 from datamanager_governance.workflows import WORKFLOWS, APP_VERSION
 
-sm = StateMachine(WORKFLOWS, store=ObjectRepository(), outbox=SqlAlchemyOutbox(),
+sm = StateMachine(WORKFLOWS, store=ObjectRepository(), events=SqlAlchemyEventStore(),
                   app_version=APP_VERSION, reject_sink=reject_in_own_transaction)
 
 # Service-Schicht, z. B. FastAPI-Endpoint oder Django-View – NIE den Status direkt setzen:
@@ -148,7 +149,9 @@ with session.begin():                                    # Django: with transact
 ## 8. Checkliste für Entwickler
 
 - [ ] Alle Statusänderungen laufen durch `transition()`, auch in Batch, Migration und Admin.
-- [ ] Event und Statusänderung stehen in derselben Transaktion (Outbox).
+- [ ] Event und Statusänderung stehen in derselben Transaktion (`process_event`).
+- [ ] `process_event` ist append-only (Trigger aktiv). Die App nutzt eine Rolle mit nur INSERT,
+      Databricks eine Rolle mit nur SELECT.
 - [ ] Abgewiesene Übergänge erzeugen ein `rejected`-Event.
 - [ ] `channel`, `app_version` und `actor` sind immer gefüllt; Service-Accounts sind erkennbar.
 - [ ] `workflow_definition.json` wird im Build erzeugt (`dm-export-workflow`), und der CI-Check

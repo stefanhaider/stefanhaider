@@ -8,9 +8,12 @@ PY=${PYTHON:-python3}
 fail=0; skip=0
 step() { echo; echo "=== $1"; }
 
-step "1/4 Python-Paket: Tests"
+step "1/4 Python-Paket: Tests (mit DM_TEST_PG_DSN zusätzlich gegen PostgreSQL)"
 if $PY -c "import pytest" 2>/dev/null; then
-  (cd python && PYTHONPATH=src $PY -m pytest -q) || fail=1
+  [ -n "${DM_TEST_PG_DSN:-}" ] || echo "Hinweis: DM_TEST_PG_DSN nicht gesetzt – PostgreSQL-Tests werden übersprungen"
+  pyout=$(cd python && PYTHONPATH=src $PY -m pytest -q 2>&1); rc=$?
+  echo "$pyout" | tail -2; [ $rc -eq 0 ] || fail=1
+  [ -n "${DM_TEST_PG_DSN:-}" ] || skip=1
 else echo "ÜBERSPRUNGEN: pip install -e ./python[test]"; skip=1; fi
 
 step "2/4 CI-Check: erwartet 8 Befunde, 6 blockierend, Exit-Code 1"

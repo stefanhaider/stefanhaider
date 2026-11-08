@@ -10,13 +10,12 @@ requires-python = ">=3.10"
 dependencies = []          # Kern nur mit Standardbibliothek
 
 [project.optional-dependencies]
-databricks = ["databricks-sdk>=0.30"]   # Publisher in ein Unity-Catalog-Volume
-test = ["pytest>=8"]
+postgres = ["psycopg[binary]>=3.1"]
+test = ["pytest>=8", "psycopg[binary]>=3.1"]
 
 [project.scripts]
 dm-export-workflow = "datamanager_governance.export:main"
 dm-check-workflow = "datamanager_governance.conformance:main"
-dm-publish-events = "datamanager_governance.publisher:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

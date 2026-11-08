@@ -49,6 +49,9 @@ erfinden.
   - Konfiguration nur in `02_process_model.sql` bzw. den JSON-Dateien in `config/`.
 * **Statuswechsel im Data Manager nur über `StateMachine.transition()`.** Abgewiesene Versuche
   über `reject_sink` in eigener Transaktion.
+* **`governance.process_event` bleibt append-only.** Den Trigger nicht entfernen und der App
+  keine UPDATE- oder DELETE-Rechte geben. Databricks liest mit einem read-only User, möglichst
+  vom Read-Replica.
 * **Keine Produktionsänderungen ohne Freigabe:** Kein Deploy in Produktion, kein Löschen oder
   Überschreiben echter Tabellen, keine Änderung an Berechtigungen und kein Versand von Alerts an
   echte Empfänger, ohne dass der Auftraggeber zugestimmt hat. Arbeite zuerst in einem Dev-Schema.
@@ -62,9 +65,10 @@ erfinden.
 |---|---|
 | SQL 01–10 (Modell, Views, Datasets, Alert) | lokal mit Apache Spark 4.0.1 geprüft, alle Abnahmewerte als Assertions in `tools/local_sql_check.py` |
 | `process_graph.vl.json` | rendert mit Vega-Lite 5.23 und 6.5 ohne Warnungen (`tools/check_vega_spec.mjs`) |
-| Python-Paket `python/` | 10 pytest-Tests grün; Export der Status-Maschine identisch mit `config/workflow_definition.json` |
+| Python-Paket `python/` | 15 pytest-Tests grün, davon 5 gegen PostgreSQL 16 (append-only, Rollen, Rollback, Kopierlogik); Export der Status-Maschine identisch mit `config/workflow_definition.json` |
+| PostgreSQL-DDL `python/sql/postgres/001_process_event.sql` | gegen PostgreSQL 16 getestet |
 | CI-Check | 8 Befunde, 6 blockierend, Exit-Code 1 (Referenzlauf) |
-| `11_load_config_from_json.sql`, `12_ingest_events.sql` | **ungetestet** (Databricks-spezifisch) |
+| `11_load_config_from_json.sql`, `12_federation_ingest.sql` | **ungetestet** (Databricks-spezifisch; die Kopierlogik von 12 ist in `test_postgres.py` nachgestellt) |
 | `process_mining.lvdash.json` | **ungetestet**, Format undokumentiert (Entwurf) |
 | Custom Viz im Workspace | **ungetestet** (Public Preview) |
 | Alles in einem echten Databricks-Workspace | **ungetestet**, das ist deine Hauptaufgabe |
@@ -77,14 +81,15 @@ mit `pip install pyspark==4.0.1 pytest`, Node 18+ mit `cd tools && npm install`.
 Frage den Auftraggeber, bevor du die Arbeitspakete 3 ff. beginnst. Details stehen in
 IMPLEMENTATION_SPEC.md, Abschnitt 3.
 
-1. Web-Framework und ORM des Data Managers (FastAPI, Django, Flask? SQLAlchemy/Postgres?) und
-   das CI-System
+1. Web-Framework und ORM des Data Managers (FastAPI, Django, Flask? SQLAlchemy?) und das
+   CI-System. Datenbank ist **PostgreSQL** (geklärt). Gibt es ein Read-Replica, und wie erreicht
+   Databricks die Datenbank (Private Link, VPC-Peering)?
 2. Echte Soll-Prozesse je Objekttyp: Status, erlaubte Übergänge, Endzustände, **Kontrollschritte**
 3. Governance-Regeln (Funktionstrennung, Fristen) inkl. Ausnahmen (technische Accounts, Notfälle)
 4. Regel für **laufende Vorgänge** (wann gilt ein Vorgang als abgeschlossen?)
 5. Process Owner, Alarm-Empfänger und Kanal (E-Mail, Teams/Slack, Ticket)
-6. Databricks: Workspace, Katalog und Schema (Dev/Prod), Volume für Events, ob Custom Viz
-   verfügbar ist, SQL Warehouse
+6. Databricks: Workspace, Katalog und Schema (Dev/Prod), Recht für `CREATE CONNECTION` bzw.
+   Metastore-Admin, Secret-Scope, ob Custom Viz verfügbar ist, SQL Warehouse
 7. Ablage des Soll-Modells (eigenes Governance-Repository mit Freigaben?)
 8. Zielwerte (Konformitätsziel je Prozess) und Zeitfenster („aktuell“ 4 Wochen, „neu“ 8 Wochen)
 
@@ -98,8 +103,8 @@ Arbeite sie in dieser Reihenfolge ab. Jedes Paket ist erst fertig, wenn seine Pr
 | AP2 | **Dev-Schema in Databricks** mit Beispieldaten: `01`, `02`, `03` ausführen (Katalog/Schema anpassen) | Tabellen und Views im Dev-Schema | Abnahmewerte aus IMPLEMENTATION_SPEC.md Abschnitt 10 per SQL im Workspace reproduziert, gleiche Zahlen wie lokal |
 | AP3 | **Dashboard im Workspace** (3 Seiten) nach Abschnitt 8 bzw. `dashboard.html`. Datasets 04–07, 09, 10; Parameter `:process` und `:domain`. Custom Viz mit `process_graph.vl.json`; Felder ohne Aggregation: `row_type, id, src, tgt, cases, median_wait_h, x, y, w, h, seq, shape, node_kind, conformance, is_control, finding_type, system_status` | Dashboard, als `.lvdash.json` exportiert und versioniert | Zahlen stimmen mit dem Mockup überein; Graph für alle 3 Prozesse ohne Konsolenfehler; Tooltips; helles und dunkles Theme |
 | AP4 | **SQL Alert** aus `08_…` | Alert (Dev: Empfänger = Auftraggeber) | Alert löst mit Beispieldaten aus (5 Zeilen, 1 neu) |
-| AP5 | **Data Manager einbinden** (Python): Paket übernehmen, echte Status-Maschinen in `workflows.py`, alle Statuswechsel über `transition()`, Outbox passend zum ORM, `reject_sink` | Pull Request im Data-Manager-Repo | Tests grün; neue Tests für die ORM-Outbox; kein Code setzt den Status an `transition()` vorbei (Suche oder Lint-Regel) |
-| AP6 | **Event-Pipeline:** `dm-publish-events` als Job, Volume, `12_ingest_events.sql`; `event_log` wird zur View auf echte Events | Events fließen von Dev-Data-Manager nach Databricks | Testvorgang im Dev-Data-Manager erscheint innerhalb des Job-Intervalls in `event_log`; abgewiesener Versuch erscheint als `rejected`; keine Duplikate |
+| AP5 | **Data Manager einbinden** (Python): Paket übernehmen, echte Status-Maschinen in `workflows.py`, alle Statuswechsel über `transition()`, Migration `001_process_event.sql`, EventStore passend zum ORM, `reject_sink` | Pull Request im Data-Manager-Repo | Tests grün inkl. `test_postgres.py` gegen eine Test-DB; neue Tests für den ORM-EventStore; kein Code setzt den Status an `transition()` vorbei (Suche oder Lint-Regel) |
+| AP6 | **Übernahme nach Databricks** per Lakehouse Federation (`12_federation_ingest.sql`): read-only DB-User (`dm_event_reader`, Read-Replica), Secrets, Connection, Foreign Catalog, Delta-Tabelle, `MERGE`-Job alle 5–15 Min.; `event_log` wird zur View | Footprints fließen vom Dev-Data-Manager nach Databricks | Testvorgang erscheint innerhalb des Job-Intervalls in `event_log`; abgewiesener Versuch erscheint als `rejected`; keine Duplikate nach mehrfachem Lauf; Vollständigkeitskontrolle = 0 |
 | AP7 | **CI-Check** in die Release-Pipeline (`pytest`, `dm-export-workflow`, `dm-check-workflow`); Prozess für genehmigte Ausnahmen mit der Governance | Pipeline-Schritt + `accepted_deviations.json` im Governance-Repo | Ein absichtlich eingebauter Übergang, der eine Kontrolle umgeht, lässt den Build scheitern |
 | AP8 | **Konfiguration aus JSON** (`11_…`) als Job nach Release bzw. Modellfreigabe; Historie der Status-Maschine | `system_allowed_transitions` mit `valid_from`/`valid_to` | Zwei Releases nacheinander laden: entfernter Übergang bekommt `valid_to`, neuer wird geöffnet |
 | AP9 | **Echte Soll-Prozesse und Regeln** in `governance_model.json` bzw. `02_…`, Layout in `process_graph_layout`; Regel für laufende Vorgänge | Konfiguration für Produktion | Befunde mit den Process Ownern durchgesprochen: echte Lücke oder fehlender Modelleintrag? |
@@ -129,7 +134,7 @@ Am Ende jedes Arbeitspakets kurz berichten:
 | Konfiguration | `02_process_model.sql`, `config/governance_model.json`, `config/workflow_definition.json`, `ci/accepted_deviations.json` |
 | Logik | `03_views.sql` (7 Views), `python/src/datamanager_governance/conformance.py` |
 | Dashboard-Datasets | `04_…` bis `07_…`, `09_…`, `10_…`; Alert `08_…` |
-| Produktion | `11_load_config_from_json.sql`, `12_ingest_events.sql` |
+| Produktion | `11_load_config_from_json.sql`, `12_federation_ingest.sql`, `python/sql/postgres/001_process_event.sql` |
 | Data Manager | `python/` (Paket + Tests), `EVENT_STANDARD.md`, `examples/` |
 | CI | `ci/check_workflow_conformance.py`, `ci/github-actions-example.yml` |
 | Prüfung | `tools/verify_all.sh`, `tools/local_sql_check.py`, `tools/check_vega_spec.mjs` |

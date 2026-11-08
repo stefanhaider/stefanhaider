@@ -1,14 +1,14 @@
-import json
+import sqlite3
 
 import pytest
 
 from datamanager_governance.events import ProcessEvent
-from datamanager_governance.outbox import DbApiOutbox
+from datamanager_governance.event_store import SqliteEventStore
 from datamanager_governance.state_machine import TransitionRejected, Workflow
 
 
-def outbox_events(conn):
-    return [json.loads(p) for _, p in DbApiOutbox().fetch_unpublished(conn)]
+def stored_events(conn):
+    return SqliteEventStore().fetch_after(conn)
 
 
 def test_happy_path_writes_one_event_per_transition(sm, conn):
@@ -17,7 +17,7 @@ def test_happy_path_writes_one_event_per_transition(sm, conn):
         with conn:
             sm.transition("Access Request", "AR-1", status, actor=actor,
                           channel="system" if actor == "system" else "ui", conn=conn, domain="Finance")
-    ev = outbox_events(conn)
+    ev = stored_events(conn)
     assert [e["activity"] for e in ev] == ["Beantragt", "Prüfung Data Owner", "Prüfung Security", "Berechtigung erteilt"]
     assert ev[0]["from_activity"] is None and ev[1]["from_activity"] == "Beantragt"
     assert {e["event_type"] for e in ev} == {"transition"}
@@ -32,8 +32,8 @@ def test_rejected_attempt_survives_rollback_of_caller(sm, conn):
             # (SQLite erlaubt nur einen Schreiber; mit Postgres darf der Aufrufer hier bereits geschrieben haben)
             sm.transition("Data Product", "DP-1", "Veröffentlicht", actor="user_042", channel="ui", conn=conn)
     assert exc.value.event.event_type == "rejected"
-    ev = outbox_events(conn)
-    assert ev[-1]["event_type"] == "rejected" and ev[-1]["from_activity"] == "Angelegt"   # Event ist da
+    ev = stored_events(conn)
+    assert ev[-1]["event_type"] == "rejected" and ev[-1]["from_activity"] == "Angelegt"   # Event ist da (eigene Transaktion)
     assert sm.store.get_status("Data Product", "DP-1", conn) == "Angelegt"                 # Status unverändert
 
 
@@ -54,3 +54,12 @@ def test_event_validation():
     with pytest.raises(ValueError):
         ProcessEvent(process="P", case_id="1", activity="A", actor="u", channel="ui", app_version="1",
                      workflow_version="1", event_type="rejected")
+
+
+def test_sqlite_table_is_append_only(sm, conn):
+    with conn:
+        sm.transition("Access Request", "AR-5", "Beantragt", actor="user_1", channel="ui", conn=conn)
+    with pytest.raises(sqlite3.DatabaseError):
+        conn.execute("UPDATE process_event SET actor = 'x'")
+    with pytest.raises(sqlite3.DatabaseError):
+        conn.execute("DELETE FROM process_event")

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from datamanager_governance.outbox import DbApiOutbox, autonomous_sink
+from datamanager_governance.event_store import SqliteEventStore, autonomous_sink
 from datamanager_governance.state_machine import StateMachine
 from datamanager_governance.workflows import APP_VERSION, WORKFLOWS
 
@@ -31,7 +31,7 @@ def db_path(tmp_path):
 def conn(db_path):
     c = sqlite3.connect(db_path)
     c.execute("CREATE TABLE objects (process TEXT, case_id TEXT, status TEXT, domain TEXT, PRIMARY KEY (process, case_id))")
-    DbApiOutbox().create_table(c)
+    SqliteEventStore().create_table(c)
     c.commit()
     yield c
     c.close()
@@ -39,8 +39,8 @@ def conn(db_path):
 
 @pytest.fixture
 def sm(db_path, conn):
-    return StateMachine(WORKFLOWS, SqliteStore(), DbApiOutbox(), app_version=APP_VERSION,
-                        reject_sink=autonomous_sink(lambda: sqlite3.connect(db_path)))
+    return StateMachine(WORKFLOWS, SqliteStore(), SqliteEventStore(), app_version=APP_VERSION,
+                        reject_sink=autonomous_sink(lambda: sqlite3.connect(db_path), SqliteEventStore()))
 
 
 @pytest.fixture

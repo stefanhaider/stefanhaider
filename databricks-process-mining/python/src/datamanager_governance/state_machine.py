@@ -4,7 +4,7 @@ Grundsatz: JEDER Statuswechsel – UI, REST-API, Admin-API, Batch, Migration, Au
 durch `StateMachine.transition()`. Sie
   1. prüft den Übergang gegen die Workflow-Definition (inkl. erlaubter Kanäle),
   2. ändert den Status über den übergebenen `StatusStore`,
-  3. schreibt genau ein ProcessEvent in die Outbox – in derselben Transaktion,
+  3. schreibt genau ein ProcessEvent in governance.process_event – in derselben Transaktion,
   4. protokolliert abgewiesene Versuche als `rejected`-Event und wirft TransitionRejected.
 
 Die Anwendung steuert die Transaktion (z. B. SQLAlchemy `with session.begin():` oder Django
@@ -13,7 +13,7 @@ Die Anwendung steuert die Transaktion (z. B. SQLAlchemy `with session.begin():` 
 Abgewiesene Versuche: TransitionRejected führt in der Anwendung typischerweise zum Rollback –
 das rejected-Event darf dabei NICHT verloren gehen. Deshalb gibt es `reject_sink`: eine Funktion,
 die das Event in einer EIGENEN, sofort committeten Transaktion speichert (z. B. eigene Session
-bzw. Connection auf dieselbe Outbox-Tabelle). Ohne reject_sink landet es in der Transaktion des
+bzw. Connection auf dieselbe Tabelle process_event). Ohne reject_sink landet es in der Transaktion des
 Aufrufers (nur sinnvoll mit raise_on_reject=False).
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
 from .events import END, START, ProcessEvent
-from .outbox import Outbox
+from .event_store import EventStore
 
 
 @dataclass(frozen=True)
@@ -71,11 +71,11 @@ class TransitionRejected(Exception):
 
 
 class StateMachine:
-    def __init__(self, workflows: list[Workflow], store: StatusStore, outbox: Outbox,
+    def __init__(self, workflows: list[Workflow], store: StatusStore, events: EventStore,
                  app_version: str, workflow_version: str | None = None,
                  reject_sink: Callable[[ProcessEvent], None] | None = None):
         self.workflows = {w.process: w for w in workflows}
-        self.store, self.outbox, self.reject_sink = store, outbox, reject_sink
+        self.store, self.events, self.reject_sink = store, events, reject_sink
         self.app_version = app_version
         self.workflow_version = workflow_version or app_version
 
@@ -100,11 +100,11 @@ class StateMachine:
         )
         if allowed:
             self.store.set_status(process, case_id, to_status, conn, domain=domain)
-            self.outbox.add(event, conn)
+            self.events.add(event, conn)
         elif self.reject_sink is not None:
             self.reject_sink(event)              # eigene Transaktion: überlebt den Rollback des Aufrufers
         else:
-            self.outbox.add(event, conn)
+            self.events.add(event, conn)
         if not allowed and raise_on_reject:
             raise TransitionRejected(event)
         return event

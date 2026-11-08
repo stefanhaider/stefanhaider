@@ -81,12 +81,13 @@ Repository `stefanhaider/stefanhaider`, Branch `ccr-f1f6041b-rq5je9`, Ordner
 | `EVENT_STANDARD.md` | **Verbindliches Event-Format** für den Data Manager, Export der Status-Maschine, Datenfluss, Entwickler-Checkliste |
 | `config/governance_model.json` | Soll-Prozess als JSON (gehört der Governance) |
 | `config/workflow_definition.json` | Export der Status-Maschine, Release 2.5, **erzeugt aus `python/…/workflows.py`** (gehört dem Data Manager) |
-| `python/` | **Python-Paket `datamanager_governance`** für den Data Manager: Event-Modell, Status-Maschine (`workflows.py` = System-Ebene), Outbox, `dm-export-workflow`, `dm-check-workflow`, `dm-publish-events`; 10 pytest-Tests |
-| `12_ingest_events.sql` | Produktion: JSONL-Events aus dem Volume per Auto Loader → `event_log_bronze` → View `event_log`. Databricks-spezifisch, **lokal nicht getestet** |
+| `python/` | **Python-Paket `datamanager_governance`** für den Data Manager: Event-Modell, Status-Maschine (`workflows.py` = System-Ebene), Speicherung in `process_event`, `dm-export-workflow`, `dm-check-workflow`; 15 pytest-Tests (5 davon gegen PostgreSQL) |
+| `python/sql/postgres/001_process_event.sql` | PostgreSQL-DDL für `governance.process_event`: append-only per Trigger, Rollen für App (INSERT) und Databricks (SELECT), UTF-8-Prüfung. **Gegen PostgreSQL 16 getestet** |
+| `12_federation_ingest.sql` | Produktion: UC-Connection + Foreign Catalog auf PostgreSQL, inkrementelles `MERGE` (Überlappungsfenster 15 Min.) nach `process_event_bronze`, View `event_log`, Vollständigkeitskontrolle. Databricks-spezifisch, **lokal nicht getestet** (Kopierlogik in `test_postgres.py` nachgestellt) |
 | `ci/check_workflow_conformance.py` | Wrapper für den CI-Check ohne installiertes Paket; Exit-Code 1 bei offenen kritischen Befunden |
 | `ci/accepted_deviations.json` | Genehmigte Ausnahmen (Begründung, Genehmiger, Ablaufdatum) |
 | `ci/github-actions-example.yml` | Beispiel-Pipeline |
-| `examples/event_writer_example.py` | Lauffähige Demo des Pakets: Statuswechsel, abgewiesener Versuch, Publisher, Export |
+| `examples/event_writer_example.py` | Lauffähige Demo des Pakets: Statuswechsel, abgewiesener Versuch, Export |
 | `examples/events_example.jsonl` | Beispiel-Events nach Standard |
 | `process_graph.vl.json` | Vega-Lite-Spezifikation des Prozessgraphen (Custom Viz) |
 | `process_mining.lvdash.json` | Entwurf der Dashboard-Exportdatei (3 Seiten). **Ungetestet**, Format undokumentiert |
@@ -125,9 +126,10 @@ Der CI-Check und die Demo laufen. Die Spezifikation rendert in Vega-Lite 5.23 un
    Personenkennungen, daher Datenschutz und Zugriff auf das Dashboard klären.
 9. Ist **Custom Viz (Public Preview)** im Workspace verfügbar, und welche Vega-Lite-Version
    läuft dort?
-10. **Technologie des Data Managers:** Sprache ist **Python** (geklärt). Offen sind Web-Framework
-    (FastAPI, Django, Flask?), ORM bzw. Datenbank (SQLAlchemy/Postgres?) und CI-System. Davon hängt
-    die konkrete Outbox-Implementierung ab (SQLAlchemy- bzw. Django-Variante, siehe `outbox.py`).
+10. **Technologie des Data Managers:** **Python mit PostgreSQL** (geklärt). Offen sind
+    Web-Framework (FastAPI, Django, Flask?), ORM (SQLAlchemy?) und CI-System. Davon hängt die
+    konkrete EventStore-Variante ab (siehe `event_store.py`). Außerdem: Gibt es ein Read-Replica,
+    und wie erreicht Databricks die Datenbank (Private Link, VPC-Peering)?
 11. **Wo liegt das Soll-Modell?** Empfehlung: `governance_model.json` in einem Governance-Repository
     mit eigenen Freigaben (Process Owner). Der Data Manager liest es nur.
 
@@ -502,11 +504,11 @@ orange, grün) nur dafür verwenden.
     ([`EVENT_STANDARD.md`](EVENT_STANDARD.md), Abschnitt 7):
     - die echten Status-Maschinen in `workflows.py` pflegen,
     - alle Statuswechsel über `StateMachine.transition()` führen (UI, API, Admin, Batch),
-    - die Outbox-Implementierung passend zum ORM ergänzen, `reject_sink` mit eigener
-      Transaktion einrichten,
-    - `dm-publish-events` als Job einrichten,
-    - `12_ingest_events.sql` als Pipeline anlegen. Damit ersetzt die View `event_log` die
-      Beispieltabelle.
+    - Migration mit `python/sql/postgres/001_process_event.sql` (Tabelle, Trigger, Rollen),
+    - EventStore passend zum ORM ergänzen, `reject_sink` mit eigener Transaktion einrichten,
+    - in Databricks `12_federation_ingest.sql`: Connection mit Secrets und read-only User
+      (Read-Replica), Foreign Catalog, Delta-Tabelle, `MERGE` als Job alle 5–15 Minuten. Damit
+      ersetzt die View `event_log` die Beispieltabelle.
 8b. **CI-Check** in die Release-Pipeline des Data Managers aufnehmen: `pytest`,
     `dm-export-workflow`, `dm-check-workflow` (Beispiel `ci/github-actions-example.yml`). Prozess für genehmigte Ausnahmen mit der Governance
     vereinbaren (`accepted_deviations.json`: Begründung, Genehmiger, Ablaufdatum).
@@ -555,9 +557,10 @@ Diese Werte müssen exakt herauskommen:
   dunkles Theme sind lesbar.
 * Der CI-Check bricht ein Release ab, wenn die Status-Maschine eine Kontrolle umgehen lässt und
   keine gültige Ausnahme existiert.
-* `pytest python/tests` ist grün (10 Tests). `dm-export-workflow` liefert dieselben 38 Übergänge wie
-  `config/workflow_definition.json`. Ein abgewiesener Versuch bleibt nach einem Rollback in der
-  Outbox erhalten.
+* `pytest python/tests` ist grün: 15 Tests, davon 5 gegen PostgreSQL mit `DM_TEST_PG_DSN`. `dm-export-workflow` liefert dieselben 38 Übergänge wie
+  `config/workflow_definition.json`. Ein abgewiesener Versuch bleibt nach einem Rollback in
+  `process_event` erhalten. UPDATE und DELETE auf `process_event` werden abgewiesen.
+* Die Vollständigkeitskontrolle aus `12_federation_ingest.sql` meldet 0 fehlende Events.
 * **Ein neuer Prozess oder eine Prozessänderung erfordert nur Einträge in `02_process_model.sql`**
   (und ggf. im Status-Mapping der Event-View), keine Änderung an Views, Datasets oder Dashboard.
 * Der Alarm erreicht den Process Owner bei einem neuen kritischen Befund.
@@ -578,6 +581,12 @@ Diese Werte müssen exakt herauskommen:
 * **`.lvdash.json` ist undokumentiert** und **Custom Viz ist Public Preview.** Nach manuellem
   Aufbau den echten Export versionieren.
 * **Feldnamen in Custom Viz** müssen exakt stimmen und dürfen nicht aggregiert sein.
+* **Inkrementelle Übernahme aus PostgreSQL:** Eine Kopie nach „`seq` > zuletzt gesehen“ verliert
+  Zeilen, wenn eine kleinere `seq` später committet (parallele Transaktionen). Deshalb Kopie ab
+  `recorded_at` − 15 Minuten mit Deduplizierung über `event_id`. Längere Transaktionen im Data
+  Manager vermeiden oder das Fenster vergrößern. Belegt durch `test_watermark_overlap_catches_late_commit`.
+* **Last auf der Produktivdatenbank:** Federation-Abfragen gehen gegen PostgreSQL. Den Kopier-Job
+  auf ein Read-Replica zeigen lassen; das Dashboard liest nur aus Delta.
 * **Selbstprüfung vermeiden:** Soll-Modell und Status-Maschine dürfen nicht aus derselben Quelle
   stammen. Änderungen am Soll-Modell brauchen eine Freigabe durch die Governance.
 * **Gültigkeitszeiträume** in `system_allowed_transitions` dürfen sich je Übergang nicht
@@ -609,7 +618,9 @@ den Einstieg des implementierenden Agenten siehe [`AGENTS.md`](AGENTS.md).
 
 Einzeln:
 
-* **Python-Paket:** `pip install -e ./python[test] && pytest python/tests`.
+* **Python-Paket:** `pip install -e ./python[test] && pytest python/tests`. Mit PostgreSQL:
+  `DM_TEST_PG_DSN=postgresql://user@host:5432/testdb pytest python/tests` (Datenbank in UTF-8, wird
+  verändert, nur Testdatenbanken!).
 * **SQL:** PySpark 4.x; `main.data_manager_pm.` durch ein lokales Schema ersetzen, `CREATE OR
   REPLACE TABLE` durch `CREATE TABLE`; Parameter über
   `spark.sql(q, args={"process": "Access Request", "domain": "Alle"})`.

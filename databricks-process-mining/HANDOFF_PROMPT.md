@@ -42,17 +42,19 @@ Leitplanken (AGENTS.md Abschnitt 3):
 |---|---|---|
 | Zugang zum Databricks-Workspace (Dev), Katalog/Schema, SQL Warehouse | Tabellen, Views, Dashboard, Alert | AP2–AP4 |
 | Zugang zum Repository des Data Managers (Branch für die Arbeit) | Einbindung des Pakets | AP5 |
+| PostgreSQL: Test-Datenbank (UTF-8) für die Tests; Dev-DB für die Migration; read-only User (Rolle `dm_event_reader`) auf dem Read-Replica; Netzwerkweg von Databricks (Private Link/VPC-Peering) | Migration, Tests, Lakehouse Federation | AP5, AP6 |
+| Databricks: Recht für `CREATE CONNECTION`, Secret-Scope für DB-Zugangsdaten | Connection und Foreign Catalog | AP6 |
 | Zugang zum CI-System bzw. Pipeline-Konfiguration | CI-Check | AP7 |
 | Governance-Repository oder Ablageort für `governance_model.json` | Soll-Modell mit Freigaben | AP7–AP9 |
 | Ansprechpartner der Process Owner | Klärung der Befunde, echte Soll-Prozesse | AP9 |
 
 ## Antworten, die du schon vorbereiten kannst (AGENTS.md Abschnitt 5)
 
-1. Framework, ORM und CI-System des Data Managers
+1. Framework, ORM und CI-System des Data Managers (Datenbank: PostgreSQL, bereits geklärt); Read-Replica und Netzwerkweg
 2. Soll-Prozesse je Objekttyp inklusive Kontrollschritte
 3. Regeln für Funktionstrennung und Fristen inklusive Ausnahmen
 4. Wann ein Vorgang als abgeschlossen gilt
 5. Process Owner und Alarm-Empfänger
-6. Workspace, Katalog und Schema, Volume, Verfügbarkeit von Custom Viz
+6. Workspace, Katalog und Schema, `CREATE CONNECTION`-Recht und Secret-Scope, Verfügbarkeit von Custom Viz
 7. Ablage des Soll-Modells
 8. Zielwerte und Zeitfenster

@@ -62,8 +62,8 @@ niemand nutzt. ◆ markiert Kontrollschritte.
 | `EVENT_STANDARD.md` | Event-Format, Export der Status-Maschine, Datenfluss, Entwickler-Checkliste |
 | `config/` | Soll-Prozess (`governance_model.json`) und Status-Maschine (`workflow_definition.json`) als JSON |
 | `ci/` | CI-Check (`check_workflow_conformance.py`), genehmigte Ausnahmen, Pipeline-Beispiel |
-| `python/` | **Python-Paket `datamanager_governance`** für den Data Manager: Status-Maschine, Events, Outbox, Export, CI-Check, Publisher (+ Tests) |
-| `12_ingest_events.sql` | Produktion: Events aus dem Volume nach `event_log` laden (Databricks-spezifisch) |
+| `python/` | **Python-Paket `datamanager_governance`** für den Data Manager: Status-Maschine, Events, Speicherung in `process_event`, Export, CI-Check (+ Tests); PostgreSQL-DDL in `python/sql/postgres/` |
+| `12_federation_ingest.sql` | Produktion: Footprints per Unity Catalog (Lakehouse Federation) aus PostgreSQL nach Delta übernehmen (Databricks-spezifisch) |
 | `examples/` | Demo des Pakets und Beispiel-Events |
 | `process_graph.vl.json` | Vega-Lite-Spezifikation für Custom Viz |
 | `process_mining.lvdash.json` | Dashboard-Entwurf zum Import (ungetestet; ohne Prozessgraph, dafür ein Platzhalter) |
@@ -94,7 +94,8 @@ Neue Prozesse oder Prozessänderungen pflegst du **nur in `02_process_model.sql`
 
 `bash tools/verify_all.sh` prüft alles lokal (Ergebnis zuletzt: **ALLES BESTANDEN**).
 
-Alle SQL-Dateien außer `11_…` und `12_…` sind lokal mit Apache Spark 4.0.1 getestet. Das
-Python-Paket hat 10 grüne Tests, der Kern braucht nur die Standardbibliothek. Die Vega-Lite-Spezifikation
+Alle Databricks-SQL-Dateien außer `11_…` und `12_…` sind lokal mit Apache Spark 4.0.1 getestet. Das
+Python-Paket hat 15 grüne Tests, davon 5 gegen echtes PostgreSQL 16. Der Kern braucht nur die
+Standardbibliothek. Die PostgreSQL-DDL (append-only, Rollen) ist gegen PostgreSQL 16 getestet. Die Vega-Lite-Spezifikation
 rendert in Vega-Lite 5 und 6 ohne Warnungen. In einem echten Databricks-Workspace ist **noch
 nichts** getestet, das ist Teil des Implementierungsauftrags.

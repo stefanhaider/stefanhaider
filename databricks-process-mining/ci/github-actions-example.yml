@@ -9,6 +9,14 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:                            # für python/tests/test_postgres.py
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: test, POSTGRES_DB: dm_test, POSTGRES_INITDB_ARGS: "--encoding=UTF8" }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DM_TEST_PG_DSN: postgresql://postgres:test@localhost:5432/dm_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4          # Soll-Modell der Governance (eigenes Repo, eigene Freigaben)
@@ -19,7 +27,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ./python[test]
-      - name: Tests (Status-Maschine, Export, Check)
+      - name: Tests (Status-Maschine, Export, Check, PostgreSQL)
         run: pytest python/tests -q
       - name: Status-Maschine exportieren
         run: mkdir -p build && dm-export-workflow --out build/workflow_definition.json
