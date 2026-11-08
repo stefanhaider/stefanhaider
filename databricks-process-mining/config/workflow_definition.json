@@ -1,0 +1,250 @@
+{
+  "application": "Data Manager",
+  "release": "2.5",
+  "exported_at": "2026-07-06T00:00:00Z",
+  "workflows": [
+    {
+      "process": "Access Request",
+      "transitions": [
+        {
+          "from": "▶ Start",
+          "to": "Beantragt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Beantragt",
+          "to": "Prüfung Data Owner",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Prüfung Data Owner",
+          "to": "Prüfung Security",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Prüfung Data Owner",
+          "to": "Abgelehnt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Prüfung Security",
+          "to": "Berechtigung erteilt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Prüfung Security",
+          "to": "Abgelehnt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Berechtigung erteilt",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Abgelehnt",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Prüfung Data Owner",
+          "to": "Beantragt",
+          "since_release": "2.2",
+          "note": "Rückfrage an Antragsteller"
+        },
+        {
+          "from": "Prüfung Data Owner",
+          "to": "Berechtigung erteilt",
+          "since_release": "2.3",
+          "note": "Security-Prüfung optional (interne Daten)"
+        },
+        {
+          "from": "Beantragt",
+          "to": "Berechtigung erteilt",
+          "since_release": "2.2",
+          "note": "Express-Vergabe (Feature-Flag, ungenutzt)"
+        }
+      ]
+    },
+    {
+      "process": "Data Contract",
+      "transitions": [
+        {
+          "from": "Änderung beantragt",
+          "to": "Schema erneut validiert",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Schema erneut validiert",
+          "to": "Review Änderung",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Review Änderung",
+          "to": "Neue Version aktiv",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Neue Version aktiv",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Verworfen",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Änderung beantragt",
+          "to": "Neue Version aktiv",
+          "since_release": "2.2",
+          "note": "REST-API: PATCH aktiviert neue Version direkt"
+        },
+        {
+          "from": "▶ Start",
+          "to": "Entwurf erstellt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Entwurf erstellt",
+          "to": "Schema validiert",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Schema validiert",
+          "to": "Review Data Owner",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Review Data Owner",
+          "to": "Freigegeben",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Review Data Owner",
+          "to": "Verworfen",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Freigegeben",
+          "to": "Aktiv",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Aktiv",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Aktiv",
+          "to": "Änderung beantragt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        }
+      ]
+    },
+    {
+      "process": "Data Product",
+      "transitions": [
+        {
+          "from": "▶ Start",
+          "to": "Angelegt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Angelegt",
+          "to": "Metadaten erfasst",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Metadaten erfasst",
+          "to": "Data Contract verknüpft",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Data Contract verknüpft",
+          "to": "Qualitätsprüfung",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Qualitätsprüfung",
+          "to": "Metadaten erfasst",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Qualitätsprüfung",
+          "to": "Freigabe Data Owner",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Freigabe Data Owner",
+          "to": "Veröffentlicht",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Freigabe Data Owner",
+          "to": "Abgelehnt",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Veröffentlicht",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Abgelehnt",
+          "to": "■ Ende",
+          "since_release": "2.2",
+          "note": "Standard-Workflow"
+        },
+        {
+          "from": "Data Contract verknüpft",
+          "to": "Freigabe Data Owner",
+          "since_release": "2.2",
+          "note": "Qualitätsprüfung überspringbar"
+        },
+        {
+          "from": "Metadaten erfasst",
+          "to": "Qualitätsprüfung",
+          "since_release": "2.2",
+          "note": "Data Contract optional"
+        },
+        {
+          "from": "Metadaten erfasst",
+          "to": "Freigabe Data Owner",
+          "since_release": "2.2",
+          "note": "Contract und Qualität überspringbar (ungenutzt)"
+        }
+      ]
+    }
+  ]
+}

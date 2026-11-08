@@ -10,6 +10,12 @@
 --   governance_rules           Regeln über den Pfad hinaus: Funktionstrennung (sod), Fristen (sla)
 --   finding_severity           Schweregrad und empfohlene Maßnahme je Befund-Typ
 --   process_graph_layout       Position der Aktivitäten im Prozessgraphen (Raster 800 breit)
+--
+-- System-Ebene (gehört dem Data-Manager-Entwicklungsteam, NICHT der Governance):
+--   app_releases                Releases des Data Managers (für Zuordnung "seit Release X")
+--   system_allowed_transitions  vom Data Manager technisch erlaubte Übergänge je Gültigkeitszeitraum.
+--                               In Produktion automatisch aus workflow_definition.json geladen
+--                               (Export der Status-Maschine, siehe EVENT_STANDARD.md).
 -- =====================================================================
 
 CREATE OR REPLACE TABLE main.data_manager_pm.process_catalog AS
@@ -78,6 +84,7 @@ SELECT * FROM VALUES
   ('Data Contract',  'Änderung beantragt',      'Schema erneut validiert'),
   ('Data Contract',  'Schema erneut validiert', 'Review Änderung'),
   ('Data Contract',  'Review Änderung',         'Neue Version aktiv'),
+  ('Data Contract',  'Review Änderung',         'Verworfen'),               -- Änderung ablehnen
   ('Data Contract',  'Neue Version aktiv',      '■ Ende'),
   ('Data Contract',  'Verworfen',               '■ Ende'),
 
@@ -153,3 +160,39 @@ SELECT * FROM VALUES
   ('Data Product',   'Abgelehnt',               660D, 500D),
   ('Data Product',   '■ Ende',                  400D, 580D)
 AS t(process, activity, x, y);
+
+
+-- ---------------------------------------------------------------------
+-- System-Ebene
+-- ---------------------------------------------------------------------
+CREATE OR REPLACE TABLE main.data_manager_pm.app_releases AS
+SELECT * FROM VALUES
+  ('2.2', TIMESTAMP'2026-01-01 00:00:00', 'Ausgangsstand'),
+  ('2.3', TIMESTAMP'2026-03-30 00:00:00', 'Access Request: Security-Prüfung für interne Datenprodukte optional'),
+  ('2.4', TIMESTAMP'2026-04-06 00:00:00', 'Data Contract: Schema-Validierung vor Review erzwungen'),
+  ('2.5', TIMESTAMP'2026-05-18 00:00:00', 'Data Product: Batch-Import für Migration aktiviert')
+AS t(version, released_at, notes);
+
+-- Erlaubte Übergänge laut Status-Maschine des Data Managers.
+-- valid_to NULL = im aktuellen Release erlaubt. Ein Event ist "vom System erlaubt",
+-- wenn zum Eventzeitpunkt ein passender Eintrag gültig war.
+CREATE OR REPLACE TABLE main.data_manager_pm.system_allowed_transitions AS
+WITH base AS (   -- alle Soll-Übergänge sind implementiert ...
+  SELECT process, src, tgt, TIMESTAMP'2026-01-01 00:00:00' AS valid_from, CAST(NULL AS TIMESTAMP) AS valid_to,
+         '2.2' AS since_release, 'Standard-Workflow' AS note
+  FROM main.data_manager_pm.process_model_transitions
+  WHERE NOT (process = 'Data Contract' AND src = 'Review Änderung' AND tgt = 'Verworfen')   -- ... außer: Änderung ablehnen fehlt
+),
+extra AS (       -- ... und das System erlaubt zusätzlich:
+  SELECT * FROM VALUES
+    ('Access Request', 'Prüfung Data Owner',      'Beantragt',              TIMESTAMP'2026-01-01 00:00:00', CAST(NULL AS TIMESTAMP), '2.2', 'Rückfrage an Antragsteller'),
+    ('Access Request', 'Prüfung Data Owner',      'Berechtigung erteilt',   TIMESTAMP'2026-03-30 00:00:00', NULL,                    '2.3', 'Security-Prüfung optional (interne Daten)'),
+    ('Access Request', 'Beantragt',               'Berechtigung erteilt',   TIMESTAMP'2026-01-01 00:00:00', NULL,                    '2.2', 'Express-Vergabe (Feature-Flag, ungenutzt)'),
+    ('Data Contract',  'Entwurf erstellt',        'Review Data Owner',      TIMESTAMP'2026-01-01 00:00:00', TIMESTAMP'2026-04-06 00:00:00', '2.2', 'bis Release 2.4: Schema-Validierung optional'),
+    ('Data Contract',  'Änderung beantragt',      'Neue Version aktiv',     TIMESTAMP'2026-01-01 00:00:00', NULL,                    '2.2', 'REST-API: PATCH aktiviert neue Version direkt'),
+    ('Data Product',   'Data Contract verknüpft', 'Freigabe Data Owner',    TIMESTAMP'2026-01-01 00:00:00', NULL,                    '2.2', 'Qualitätsprüfung überspringbar'),
+    ('Data Product',   'Metadaten erfasst',       'Qualitätsprüfung',       TIMESTAMP'2026-01-01 00:00:00', NULL,                    '2.2', 'Data Contract optional'),
+    ('Data Product',   'Metadaten erfasst',       'Freigabe Data Owner',    TIMESTAMP'2026-01-01 00:00:00', NULL,                    '2.2', 'Contract und Qualität überspringbar (ungenutzt)')
+  AS t(process, src, tgt, valid_from, valid_to, since_release, note)
+)
+SELECT * FROM base UNION ALL SELECT * FROM extra;

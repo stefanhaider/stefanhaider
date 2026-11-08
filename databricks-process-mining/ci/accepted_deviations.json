@@ -1,0 +1,23 @@
+{
+  "description": "Von der Governance genehmigte Abweichungen zwischen Status-Maschine und Soll-Prozess. Jede Ausnahme braucht Begründung, Genehmiger und Ablaufdatum. Abgelaufene Ausnahmen blockieren den Build wieder.",
+  "accepted": [
+    {
+      "process": "Access Request",
+      "check": "SYSTEM_ERLAUBT_MEHR",
+      "transition": "Prüfung Data Owner → Beantragt",
+      "reason": "Rückfrage an den Antragsteller ist fachlich gewollt; Aufnahme in den Soll-Prozess beantragt (GOV-142).",
+      "approved_by": "Data Governance Office",
+      "approved_at": "2026-02-10",
+      "expires": "2026-09-30"
+    },
+    {
+      "process": "Access Request",
+      "check": "SYSTEM_ERLAUBT_MEHR",
+      "transition": "Prüfung Data Owner → Berechtigung erteilt",
+      "reason": "Security-Prüfung für interne Datenprodukte temporär optional (Release 2.3), befristet bis Einführung der automatischen Klassifizierung.",
+      "approved_by": "CISO",
+      "approved_at": "2026-03-27",
+      "expires": "2026-06-30"
+    }
+  ]
+}

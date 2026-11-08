@@ -23,6 +23,8 @@ SELECT
   CAST(MIN(f.event_ts) AS DATE) AS first_seen,
   MIN(f.case_start) >= r.ref_ts - INTERVAL 56 DAYS AS is_new,
   array_join(slice(array_sort(collect_set(f.case_id), (a, b) -> CASE WHEN a < b THEN 1 WHEN a > b THEN -1 ELSE 0 END), 1, 5), ', ') AS example_cases,
+  array_join(array_sort(collect_set(f.channel)), ', ') AS channels,
+  MAX(f.system_status) AS system_status,
   MAX(pc.owner) AS process_owner
 FROM f
 JOIN ref r USING (process)

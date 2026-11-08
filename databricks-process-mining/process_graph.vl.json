@@ -12,7 +12,8 @@
     },
     "legend": {
       "labelFontSize": 11,
-      "symbolStrokeWidth": 2
+      "symbolStrokeWidth": 2,
+      "labelLimit": 260
     }
   },
   "layer": [
@@ -106,12 +107,14 @@
             "domain": [
               "soll",
               "abweichung",
-              "kontrolle_umgangen"
+              "kontrolle_umgangen",
+              "latent"
             ],
             "range": [
               "#8f8e88",
               "#eb6834",
-              "#d03b3b"
+              "#d03b3b",
+              "#a3a29c"
             ]
           },
           "legend": {
@@ -119,7 +122,7 @@
             "orient": "top-left",
             "direction": "vertical",
             "symbolType": "stroke",
-            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : datum.label === 'abweichung' ? 'Abweichung' : 'Kontrolle umgangen'"
+            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : datum.label === 'abweichung' ? 'Abweichung' : datum.label === 'kontrolle_umgangen' ? 'Kontrolle umgangen' : 'System erlaubt, ungenutzt'"
           }
         },
         "strokeDash": {
@@ -129,7 +132,8 @@
             "domain": [
               "soll",
               "abweichung",
-              "kontrolle_umgangen"
+              "kontrolle_umgangen",
+              "latent"
             ],
             "range": [
               [
@@ -143,6 +147,10 @@
               [
                 6,
                 4
+              ],
+              [
+                2,
+                3
               ]
             ]
           },
@@ -151,9 +159,32 @@
             "orient": "top-left",
             "direction": "vertical",
             "symbolType": "stroke",
-            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : datum.label === 'abweichung' ? 'Abweichung' : 'Kontrolle umgangen'"
+            "labelExpr": "datum.label === 'soll' ? 'Laut Soll-Prozess' : datum.label === 'abweichung' ? 'Abweichung' : datum.label === 'kontrolle_umgangen' ? 'Kontrolle umgangen' : 'System erlaubt, ungenutzt'"
           }
-        }
+        },
+        "tooltip": [
+          {
+            "field": "src",
+            "type": "nominal",
+            "title": "Von"
+          },
+          {
+            "field": "tgt",
+            "type": "nominal",
+            "title": "Nach"
+          },
+          {
+            "field": "system_status",
+            "type": "nominal",
+            "title": "System"
+          },
+          {
+            "field": "cases",
+            "type": "quantitative",
+            "title": "Übergänge",
+            "format": ","
+          }
+        ]
       }
     },
     {
@@ -211,12 +242,14 @@
             "domain": [
               "soll",
               "abweichung",
-              "kontrolle_umgangen"
+              "kontrolle_umgangen",
+              "latent"
             ],
             "range": [
               "#8f8e88",
               "#eb6834",
-              "#d03b3b"
+              "#d03b3b",
+              "#a3a29c"
             ]
           }
         }
@@ -225,7 +258,7 @@
     {
       "transform": [
         {
-          "filter": "datum.row_type === 'label'"
+          "filter": "datum.row_type === 'label' && datum.cases > 0"
         },
         {
           "calculate": "replace(format(datum.cases, ','), ',', '.')",
@@ -267,12 +300,14 @@
                 "domain": [
                   "soll",
                   "abweichung",
-                  "kontrolle_umgangen"
+                  "kontrolle_umgangen",
+                  "latent"
                 ],
                 "range": [
                   "#c3c2b7",
                   "#eb6834",
-                  "#d03b3b"
+                  "#d03b3b",
+                  "#a3a29c"
                 ]
               }
             }
@@ -327,6 +362,11 @@
             "field": "status",
             "type": "nominal",
             "title": "Befund"
+          },
+          {
+            "field": "system_status",
+            "type": "nominal",
+            "title": "System"
           },
           {
             "field": "cases",

@@ -8,6 +8,8 @@
 --            'tritt weiterhin auf'    – auch in den letzten 4 Wochen
 --            'nicht mehr aufgetreten' – in den letzten 4 Wochen kein Vorkommen
 -- Bezug: jüngster Vorgangsstart je Prozess (bei Live-Daten: current_timestamp()).
+-- channels / first_release / system_status: über welchen Kanal, seit welchem Release,
+-- und ob der Data Manager den Weg laut Status-Maschine erlaubt (oder er daran vorbei lief).
 -- Parameter: :domain ('Alle' = kein Filter)
 -- =====================================================================
 WITH cases AS (
@@ -49,6 +51,11 @@ SELECT
     ELSE 'nicht mehr aufgetreten'
   END                                                                           AS status,
   MAX(f.recommended_action)                                                     AS recommended_action,
+  array_join(array_sort(collect_set(f.channel)), ', ')                          AS channels,
+  MIN_BY(f.app_version, f.event_ts)                                             AS first_release,
+  CASE WHEN BOOL_OR(f.system_status = 'außerhalb des Workflows') THEN 'außerhalb des Workflows'
+       WHEN BOOL_OR(f.system_status = 'vom System erlaubt')      THEN 'vom System erlaubt'
+       ELSE 'Regelprüfung' END                                                   AS system_status,
   MAX(pc.owner)                                                                 AS process_owner
 FROM f
 JOIN ref r USING (process)

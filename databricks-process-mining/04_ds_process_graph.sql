@@ -10,20 +10,35 @@
 --   arrow : Pfeilspitze (shape = Richtung)
 --   label : Position der Zahl auf der Kante
 --   frame : zwei unsichtbare Eckpunkte (0,0) und (800, Höhe) – legen den Zeichenbereich fest
--- conformance: 'soll' | 'abweichung' | 'kontrolle_umgangen'
+-- conformance: 'soll' | 'abweichung' | 'kontrolle_umgangen' | 'latent'
+--   latent = vom System (aktuelles Release) erlaubt, nicht im Soll-Prozess, aber noch nie genutzt
+-- system_status: 'vom System erlaubt' | 'außerhalb des Workflows' | 'erlaubt, ungenutzt'
 -- Positionen kommen aus process_graph_layout (02_process_model.sql).
 -- =====================================================================
 WITH t AS (
   SELECT * FROM main.data_manager_pm.v_transitions
   WHERE process = :process AND (:domain = 'Alle' OR domain = :domain)
 ),
-trans AS (
+observed AS (
   SELECT src, tgt, COUNT(*) AS cases, MEDIAN(wait_h) AS median_wait_h,
          MAX(finding_type) AS finding_type,
          CASE WHEN BOOL_OR(is_allowed) THEN 'soll'
               WHEN MAX(finding_type) = 'Kontrolle umgangen' THEN 'kontrolle_umgangen'
-              ELSE 'abweichung' END AS conformance
+              ELSE 'abweichung' END AS conformance,
+         IF(BOOL_AND(is_system_allowed), 'vom System erlaubt', 'außerhalb des Workflows') AS system_status
   FROM t GROUP BY src, tgt
+),
+latent AS (   -- vom System erlaubt, nicht im Soll, noch nie genutzt
+  SELECT sa.src, sa.tgt, CAST(0 AS BIGINT) AS cases, CAST(NULL AS DOUBLE) AS median_wait_h,
+         c.finding_type, 'latent' AS conformance, 'erlaubt, ungenutzt' AS system_status
+  FROM main.data_manager_pm.system_allowed_transitions sa
+  JOIN main.data_manager_pm.v_transition_classes c
+    ON c.process = sa.process AND c.src = sa.src AND c.tgt = sa.tgt AND NOT c.is_allowed
+  LEFT ANTI JOIN observed o ON o.src = sa.src AND o.tgt = sa.tgt
+  WHERE sa.process = :process AND sa.valid_to IS NULL
+),
+trans AS (
+  SELECT * FROM observed UNION ALL SELECT * FROM latent
 ),
 node_counts AS (
   SELECT tgt AS activity, COUNT(*) AS cases FROM t WHERE tgt <> '■ Ende' GROUP BY tgt
@@ -117,7 +132,7 @@ routed AS (
   LEFT JOIN skip_lane sl USING (src, tgt)
 ),
 geom AS (
-  SELECT src, tgt, cases, median_wait_h, conformance, finding_type,
+  SELECT src, tgt, cases, median_wait_h, conformance, finding_type, system_status,
     CASE etype
       WHEN 'straight' THEN array(named_struct('x', entry_x, 'y', y0 + h0 / 2), named_struct('x', entry_x, 'y', y1 - h1 / 2))
       WHEN 'side_down' THEN array(
@@ -168,21 +183,22 @@ geom AS (
 )
 SELECT 'node' AS row_type, activity AS id, CAST(NULL AS STRING) AS src, CAST(NULL AS STRING) AS tgt,
        cases, CAST(NULL AS DOUBLE) AS median_wait_h, x, y, w, h, CAST(NULL AS INT) AS seq,
-       CAST(NULL AS STRING) AS shape, node_kind, conformance, is_control, CAST(NULL AS STRING) AS finding_type
+       CAST(NULL AS STRING) AS shape, node_kind, conformance, is_control, CAST(NULL AS STRING) AS finding_type,
+       CAST(NULL AS STRING) AS system_status
 FROM nodes
 UNION ALL
-SELECT 'edge', concat(src, ' → ', tgt), src, tgt, cases, median_wait_h, p.x, p.y, NULL, NULL, i, NULL, NULL, conformance, NULL, finding_type
+SELECT 'edge', concat(src, ' → ', tgt), src, tgt, cases, median_wait_h, p.x, p.y, NULL, NULL, i, NULL, NULL, conformance, NULL, finding_type, system_status
 FROM geom LATERAL VIEW posexplode(pts) AS i, p
 UNION ALL   -- Pfeilspitze 5 Einheiten vor dem Endpunkt
 SELECT 'arrow', concat(src, ' → ', tgt), src, tgt, cases, median_wait_h,
        element_at(pts, -1).x + CASE arrow_shape WHEN 'triangle-right' THEN -5 WHEN 'triangle-left' THEN 5 ELSE 0 END,
        element_at(pts, -1).y + IF(arrow_shape = 'triangle-down', -5, 0),
-       NULL, NULL, NULL, arrow_shape, NULL, conformance, NULL, finding_type
+       NULL, NULL, NULL, arrow_shape, NULL, conformance, NULL, finding_type, system_status
 FROM geom
 UNION ALL
-SELECT 'label', concat(src, ' → ', tgt), src, tgt, cases, median_wait_h, lbl.x, lbl.y, NULL, NULL, NULL, NULL, NULL, conformance, NULL, finding_type
+SELECT 'label', concat(src, ' → ', tgt), src, tgt, cases, median_wait_h, lbl.x, lbl.y, NULL, NULL, NULL, NULL, NULL, conformance, NULL, finding_type, system_status
 FROM geom
 UNION ALL   -- Zeichenbereich: 800 breit, Höhe = tiefster Knoten + 40
-SELECT 'frame', 'frame', NULL, NULL, NULL, NULL, fx, fy, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+SELECT 'frame', 'frame', NULL, NULL, NULL, NULL, fx, fy, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 FROM (SELECT MAX(y + h / 2) + 22 AS max_y FROM nodes)
 LATERAL VIEW inline(array(named_struct('fx', 0D, 'fy', 0D), named_struct('fx', 800D, 'fy', max_y))) f AS fx, fy;

@@ -71,6 +71,30 @@
         "GROUP BY f.process, f.finding_type, f.finding, f.severity, f.severity_rank, r.recent_from, r.new_from, r.all_cases, r.recent_cases\n",
         "ORDER BY f.severity_rank, cases_last_4w DESC, cases DESC\n"
       ]
+    },
+    {
+      "name": "system_conformance",
+      "displayName": "System-Konformität (Soll · System · Ist)",
+      "queryLines": [
+        "SELECT\n",
+        "  v.*,\n",
+        "  pc.owner AS process_owner\n",
+        "FROM main.data_manager_pm.v_system_conformance v\n",
+        "JOIN main.data_manager_pm.process_catalog pc USING (process)\n",
+        "ORDER BY CASE v.severity WHEN 'kritisch' THEN 1 WHEN 'hoch' THEN 2 WHEN 'mittel' THEN 3 ELSE 4 END,\n",
+        "         v.process, v.observed_cases DESC\n"
+      ]
+    },
+    {
+      "name": "rejected_attempts",
+      "displayName": "Abgewiesene Versuche",
+      "queryLines": [
+        "SELECT\n",
+        "  r.*,\n",
+        "  pc.owner AS process_owner\n",
+        "FROM main.data_manager_pm.v_rejected_attempts r\n",
+        "JOIN main.data_manager_pm.process_catalog pc USING (process)\n"
+      ]
     }
   ],
   "pages": [
@@ -568,6 +592,18 @@
                     {
                       "name": "recommended_action",
                       "expression": "`recommended_action`"
+                    },
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    },
+                    {
+                      "name": "first_release",
+                      "expression": "`first_release`"
+                    },
+                    {
+                      "name": "system_status",
+                      "expression": "`system_status`"
                     }
                   ],
                   "disaggregated": true
@@ -598,6 +634,18 @@
                   {
                     "fieldName": "finding",
                     "displayName": "Befund"
+                  },
+                  {
+                    "fieldName": "system_status",
+                    "displayName": "System-Status"
+                  },
+                  {
+                    "fieldName": "first_release",
+                    "displayName": "Seit Release"
+                  },
+                  {
+                    "fieldName": "channels",
+                    "displayName": "Kanäle"
                   },
                   {
                     "fieldName": "cases_last_4w",
@@ -1305,6 +1353,18 @@
                     {
                       "name": "recommended_action",
                       "expression": "`recommended_action`"
+                    },
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    },
+                    {
+                      "name": "first_release",
+                      "expression": "`first_release`"
+                    },
+                    {
+                      "name": "system_status",
+                      "expression": "`system_status`"
                     }
                   ],
                   "disaggregated": true
@@ -1335,6 +1395,18 @@
                   {
                     "fieldName": "finding",
                     "displayName": "Befund"
+                  },
+                  {
+                    "fieldName": "system_status",
+                    "displayName": "System-Status"
+                  },
+                  {
+                    "fieldName": "first_release",
+                    "displayName": "Seit Release"
+                  },
+                  {
+                    "fieldName": "channels",
+                    "displayName": "Kanäle"
                   },
                   {
                     "fieldName": "cases_last_4w",
@@ -1458,6 +1530,614 @@
             "x": 0,
             "y": 27,
             "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "systemkonformitaet",
+      "displayName": "System-Konformität",
+      "layout": [
+        {
+          "widget": {
+            "name": "filter_process_s",
+            "queries": [
+              {
+                "name": "f_sys",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "f_rej",
+                "query": {
+                  "datasetName": "rejected_attempts",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_sys"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess",
+                    "queryName": "f_rej"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Prozess"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 2,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "s_trans",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "n",
+                      "expression": "COUNT_IF(`in_system`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "n",
+                  "displayName": "Übergänge im System"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Übergänge im System"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_more",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "more",
+                      "expression": "COUNT_IF(`system_category` LIKE 'System lässt mehr zu%')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "more",
+                  "displayName": "System lässt mehr zu"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "System lässt mehr zu"
+              }
+            }
+          },
+          "position": {
+            "x": 1,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_miss",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "miss",
+                      "expression": "COUNT_IF(`system_category` = 'Soll-Schritt nicht implementiert')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "miss",
+                  "displayName": "Soll nicht implementiert"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Soll nicht implementiert"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_out",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "out",
+                      "expression": "SUM(`cases_outside_workflow`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "out",
+                  "displayName": "Vorgänge außerhalb des Workflows"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vorgänge außerhalb des Workflows"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_rej",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "rejected_attempts",
+                  "fields": [
+                    {
+                      "name": "rej",
+                      "expression": "COUNT(*)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "rej",
+                  "displayName": "Abgewiesene Versuche"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Abgewiesene Versuche"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_latent",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "lat",
+                      "expression": "COUNT_IF(`system_category` = 'System lässt mehr zu – latent')"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "lat",
+                  "displayName": "Latente Lücken"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Latente Lücken"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 1,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "s_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "severity",
+                      "expression": "`severity`"
+                    },
+                    {
+                      "name": "system_category",
+                      "expression": "`system_category`"
+                    },
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "transition",
+                      "expression": "`transition`"
+                    },
+                    {
+                      "name": "finding_type",
+                      "expression": "`finding_type`"
+                    },
+                    {
+                      "name": "skipped_controls",
+                      "expression": "`skipped_controls`"
+                    },
+                    {
+                      "name": "in_soll",
+                      "expression": "`in_soll`"
+                    },
+                    {
+                      "name": "in_system",
+                      "expression": "`in_system`"
+                    },
+                    {
+                      "name": "system_note",
+                      "expression": "`system_note`"
+                    },
+                    {
+                      "name": "since_release",
+                      "expression": "`since_release`"
+                    },
+                    {
+                      "name": "observed_cases",
+                      "expression": "`observed_cases`"
+                    },
+                    {
+                      "name": "cases_outside_workflow",
+                      "expression": "`cases_outside_workflow`"
+                    },
+                    {
+                      "name": "rejected_attempts",
+                      "expression": "`rejected_attempts`"
+                    },
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "severity",
+                    "displayName": "Schwere"
+                  },
+                  {
+                    "fieldName": "system_category",
+                    "displayName": "Kategorie"
+                  },
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "transition",
+                    "displayName": "Übergang"
+                  },
+                  {
+                    "fieldName": "finding_type",
+                    "displayName": "Befund-Typ"
+                  },
+                  {
+                    "fieldName": "skipped_controls",
+                    "displayName": "Umgangene Kontrollen"
+                  },
+                  {
+                    "fieldName": "in_soll",
+                    "displayName": "Soll"
+                  },
+                  {
+                    "fieldName": "in_system",
+                    "displayName": "System"
+                  },
+                  {
+                    "fieldName": "system_note",
+                    "displayName": "System-Hinweis"
+                  },
+                  {
+                    "fieldName": "since_release",
+                    "displayName": "Seit Release"
+                  },
+                  {
+                    "fieldName": "observed_cases",
+                    "displayName": "Ist (Vorgänge)"
+                  },
+                  {
+                    "fieldName": "cases_outside_workflow",
+                    "displayName": "davon außerhalb"
+                  },
+                  {
+                    "fieldName": "rejected_attempts",
+                    "displayName": "Abgewiesen"
+                  },
+                  {
+                    "fieldName": "channels",
+                    "displayName": "Kanäle"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Soll · System · Ist je Übergang (Filter: system_category ≠ Konform)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "s_rejected",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "rejected_attempts",
+                  "fields": [
+                    {
+                      "name": "process",
+                      "expression": "`process`"
+                    },
+                    {
+                      "name": "case_id",
+                      "expression": "`case_id`"
+                    },
+                    {
+                      "name": "attempt",
+                      "expression": "`attempt`"
+                    },
+                    {
+                      "name": "attempted_transition",
+                      "expression": "`attempted_transition`"
+                    },
+                    {
+                      "name": "actor",
+                      "expression": "`actor`"
+                    },
+                    {
+                      "name": "channel",
+                      "expression": "`channel`"
+                    },
+                    {
+                      "name": "app_version",
+                      "expression": "`app_version`"
+                    },
+                    {
+                      "name": "event_ts",
+                      "expression": "`event_ts`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 1,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "process",
+                    "displayName": "Prozess"
+                  },
+                  {
+                    "fieldName": "case_id",
+                    "displayName": "Vorgang"
+                  },
+                  {
+                    "fieldName": "attempt",
+                    "displayName": "Versuch"
+                  },
+                  {
+                    "fieldName": "attempted_transition",
+                    "displayName": "Übergang"
+                  },
+                  {
+                    "fieldName": "actor",
+                    "displayName": "Person"
+                  },
+                  {
+                    "fieldName": "channel",
+                    "displayName": "Kanal"
+                  },
+                  {
+                    "fieldName": "app_version",
+                    "displayName": "Release"
+                  },
+                  {
+                    "fieldName": "event_ts",
+                    "displayName": "Zeitpunkt"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Vom System abgewiesene Versuche"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 15,
+            "width": 3,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "s_channels",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "system_conformance",
+                  "fields": [
+                    {
+                      "name": "channels",
+                      "expression": "`channels`"
+                    },
+                    {
+                      "name": "cases",
+                      "expression": "SUM(`observed_cases`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "cases",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Vorgänge"
+                },
+                "y": {
+                  "fieldName": "channels",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Kanal"
+                },
+                "label": {
+                  "show": true
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Übergänge nach Kanal (Filter: system_category ≠ Konform)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 15,
+            "width": 3,
             "height": 8
           }
         }
